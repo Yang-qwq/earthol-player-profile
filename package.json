@@ -1,0 +1,33 @@
+{
+  "name": "earthol-player-profile",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "npm run build:css && wrangler dev",
+    "build": "npm run build:css",
+    "deploy": "npm run build:css && wrangler deploy --env production",
+    "build:css": "tailwindcss -i ./src/styles/app.css -o ./public/styles.css --minify",
+    "watch:css": "tailwindcss -i ./src/styles/app.css -o ./public/styles.css --watch",
+    "typecheck": "tsc --noEmit",
+    "cf-typegen": "wrangler types",
+    "db:init": "wrangler d1 execute earthol-player-profile-d1 --local --file=./schema.sql",
+    "db:init:remote": "wrangler d1 execute earthol-player-profile-d1 --remote --file=./schema.sql"
+  },
+  "dependencies": {
+    "hono": "^4.6.14",
+    "mfm-js": "^0.26.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260908.1",
+    "@tailwindcss/cli": "^4.0.0",
+    "tailwindcss": "^4.0.0",
+    "typescript": "^5.7.3",
+    "wrangler": "^4.0.0"
+  },
+  "allowScripts": {
+    "esbuild@0.28.1": true,
+    "workerd@1.20260908.1": true,
+    "@parcel/watcher@2.5.1": true
+  }
+}

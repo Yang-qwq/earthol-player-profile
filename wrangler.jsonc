@@ -1,0 +1,42 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "earthol-player-profile",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-01",
+  "compatibility_flags": [],
+  "keep_vars": true,
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS"
+  },
+  "observability": {
+    "enabled": true
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "earthol-player-profile-d1"
+    }
+  ],
+  "kv_namespaces": [
+    {
+      "binding": "KV"
+    }
+  ],
+  "env": {
+    "production": {
+      "name": "earthol-player-profile-production",
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "earthol-player-profile-d1"
+        }
+      ],
+      "kv_namespaces": [
+        {
+          "binding": "KV"
+        }
+      ]
+    }
+  }
+}

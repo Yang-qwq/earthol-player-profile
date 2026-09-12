@@ -1,0 +1,562 @@
+@import 'tailwindcss';
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme inline {
+  --font-sans:
+    'Quicksand', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue',
+    Arial, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+  --color-elevated: hsl(var(--elevated));
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-border: hsl(var(--border));
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+  --color-success: hsl(var(--success));
+  --color-success-foreground: hsl(var(--success-foreground));
+  --color-warning: hsl(var(--warning));
+  --color-warning-foreground: hsl(var(--warning-foreground));
+  --color-danger: hsl(var(--danger));
+  --color-danger-foreground: hsl(var(--danger-foreground));
+  --color-ring: hsl(var(--ring));
+
+  --radius-card: 14px;
+  --shadow-card: var(--card-shadow);
+  --shadow-pop: var(--pop-shadow);
+}
+
+/* Light theme (default token block) */
+:root {
+  --background: 0 0% 100%;
+  --foreground: 201.82 24.44% 8.82%;
+  --card: 0 0% 100%;
+  --card-foreground: 201.82 24.44% 8.82%;
+  --elevated: 240 5.88% 90%;
+  --muted: 240 4.76% 95.88%;
+  --muted-foreground: 240 3.83% 46.08%;
+  --border: 240 5.88% 90%;
+  --primary: 217.2 91.2% 59.8%;
+  --primary-foreground: 210 40% 98%;
+  --secondary: 193.33 43.37% 67.45%;
+  --secondary-foreground: 0 0% 100%;
+  --success: 146.01 62.45% 40%;
+  --success-foreground: 0 0% 100%;
+  --warning: 37.03 91.27% 50%;
+  --warning-foreground: 0 0% 0%;
+  --danger: 350 78% 52%;
+  --danger-foreground: 0 0% 100%;
+  --ring: 217.2 91.2% 59.8%;
+  --card-shadow:
+    0 0 5px 0 rgb(0 0 0 / 0.04), 0 2px 12px 0 rgb(0 0 0 / 0.08);
+  --pop-shadow:
+    0 0 15px 0 rgb(0 0 0 / 0.08), 0 12px 40px 0 rgb(0 0 0 / 0.18);
+}
+
+/* Dark theme — pure, floating cards with inner highlight (HeroUI style) */
+.dark {
+  --background: 240 6% 4%;
+  --foreground: 210 5.56% 92.94%;
+  --card: 240 5.88% 10%;
+  --card-foreground: 0 0% 98.04%;
+  --elevated: 240 5.26% 26.08%;
+  --muted: 240 3.7% 15.88%;
+  --muted-foreground: 240 5.03% 64.9%;
+  --border: 240 4.5% 20%;
+  --primary: 339.2 90.36% 51.18%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 270 59.26% 57.65%;
+  --secondary-foreground: 0 0% 100%;
+  --success: 145.96 79.46% 43.92%;
+  --success-foreground: 0 0% 100%;
+  --warning: 37.03 91.27% 55.1%;
+  --warning-foreground: 0 0% 0%;
+  --danger: 325.82 69.62% 53.53%;
+  --danger-foreground: 0 0% 100%;
+  --ring: 339.2 90.36% 51.18%;
+  --card-shadow:
+    0 0 5px 0 rgb(0 0 0 / 0.05), 0 2px 12px 0 rgb(0 0 0 / 0.25),
+    inset 0 0 1px 0 rgb(255 255 255 / 0.12);
+  --pop-shadow:
+    0 0 20px 0 rgb(0 0 0 / 0.2), 0 24px 60px 0 rgb(0 0 0 / 0.4),
+    inset 0 0 1px 0 rgb(255 255 255 / 0.14);
+}
+
+@layer base {
+  * {
+    border-color: hsl(var(--border));
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+    font-family: var(--font-sans);
+    font-feature-settings: 'ss01';
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  ::selection {
+    background-color: hsl(var(--primary) / 0.28);
+  }
+
+  /* Slim, theme-aware scrollbars for the console panes */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--elevated)) transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  *::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--elevated));
+    border-radius: 9999px;
+  }
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}
+
+/* Mobile console drawer — toggled by NAV_SCRIPT (`nav-open` on #console-shell) */
+.console-nav {
+  transform: translateX(-100%);
+}
+.console-backdrop {
+  opacity: 0;
+  pointer-events: none;
+}
+.nav-open .console-nav {
+  transform: translateX(0);
+}
+.nav-open .console-backdrop {
+  opacity: 1;
+  pointer-events: auto;
+}
+@media (min-width: 1024px) {
+  .console-nav {
+    transform: none;
+  }
+  .console-backdrop {
+    display: none;
+  }
+}
+
+@layer components {
+  /* Shared primitives matching the reference design system */
+  .card {
+    @apply rounded-card bg-card text-card-foreground shadow-card;
+  }
+
+  .btn {
+    @apply inline-flex select-none items-center justify-center gap-2 whitespace-nowrap rounded-full text-sm font-semibold transition-[color,background-color,opacity,box-shadow,transform] duration-150 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50;
+  }
+  .btn-primary {
+    @apply inline-flex select-none items-center justify-center gap-2 whitespace-nowrap rounded-full text-sm font-semibold transition-[color,background-color,opacity,box-shadow,transform] duration-150 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50 bg-primary px-5 py-2.5 text-primary-foreground shadow-sm hover:opacity-90;
+  }
+  .btn-secondary {
+    @apply inline-flex select-none items-center justify-center gap-2 whitespace-nowrap rounded-full text-sm font-semibold transition-[color,background-color,opacity,box-shadow,transform] duration-150 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50 bg-secondary px-5 py-2.5 text-secondary-foreground shadow-sm hover:opacity-90;
+  }
+  .btn-ghost {
+    @apply inline-flex select-none items-center justify-center gap-2 whitespace-nowrap rounded-full text-sm font-semibold transition-[color,background-color,opacity,box-shadow,transform] duration-150 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50 px-4 py-2 text-foreground/80 hover:bg-muted hover:text-foreground;
+  }
+  .btn-outline {
+    @apply inline-flex select-none items-center justify-center gap-2 whitespace-nowrap rounded-full text-sm font-semibold transition-[color,background-color,opacity,box-shadow,transform] duration-150 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50 border border-border bg-transparent px-4 py-2 hover:bg-muted;
+  }
+  .btn-danger {
+    @apply inline-flex select-none items-center justify-center gap-2 whitespace-nowrap rounded-full text-sm font-semibold transition-[color,background-color,opacity,box-shadow,transform] duration-150 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50 bg-danger px-5 py-2.5 text-danger-foreground shadow-sm hover:opacity-90;
+  }
+
+  .btn-icon {
+    @apply inline-flex h-10 w-10 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted hover:text-foreground;
+  }
+
+  /* Icon dropdown (toggled via `data-open` by DROPDOWN_SCRIPT) */
+  .dropdown {
+    @apply relative;
+  }
+  .dropdown-menu {
+    @apply absolute right-0 top-full z-50 mt-2 w-36 overflow-hidden rounded-xl border border-border bg-card p-1 shadow-pop;
+    display: none;
+  }
+  .dropdown[data-open] .dropdown-menu {
+    display: block;
+  }
+
+  .field {
+    @apply w-full rounded-full border border-border bg-muted px-4 py-2.5 text-sm text-foreground outline-none transition placeholder:text-muted-foreground/70 focus:border-primary focus:bg-card focus:ring-2 focus:ring-ring/30;
+  }
+
+  .label {
+    @apply mb-1.5 block text-sm font-medium text-foreground/80;
+  }
+
+  .chip {
+    @apply inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold;
+  }
+}
+
+/* Tag autocomplete dropdown (created by TAG_AUTOCOMPLETE_SCRIPT) */
+.tag-suggest {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  z-index: 50;
+  margin-top: 0.25rem;
+  max-height: 15rem;
+  overflow-y: auto;
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.75rem;
+  background-color: hsl(var(--card));
+  padding: 0.25rem;
+  box-shadow: var(--pop-shadow);
+}
+.tag-suggest-item {
+  display: block;
+  width: 100%;
+  border-radius: 0.5rem;
+  padding: 0.4rem 0.75rem;
+  text-align: left;
+  font-size: 0.875rem;
+  color: hsl(var(--muted-foreground));
+}
+.tag-suggest-item:hover,
+.tag-suggest-item[aria-selected='true'] {
+  background-color: hsl(var(--muted));
+  color: hsl(var(--foreground));
+}
+
+/* Profile share QR frame (filled by SHARE_SCRIPT in src/views/profile.tsx) */
+.share-qr-box {
+  display: grid;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  place-items: center;
+  border: 1px solid hsl(var(--border));
+  border-radius: 1rem;
+  background-color: #fff;
+  padding: 0.75rem;
+  text-align: center;
+}
+.share-qr-box svg {
+  width: 100%;
+  height: 100%;
+}
+
+/* Hidden-tag toggle icon swap (driven by TAG_HIDDEN_SCRIPT) */
+[data-tag-hidden-toggle][aria-pressed='false'] .tag-hidden-off,
+[data-tag-hidden-toggle][aria-pressed='true'] .tag-hidden-visible {
+  display: none;
+}
+
+/* Material Symbols sizing. The Google Fonts stylesheet that defines
+   `.material-symbols-outlined` is unlayered, so it beats Tailwind's layered
+   utilities (`hidden`, `text-*`). These overrides are unlayered too and loaded
+   after it, so they win; use them instead of Tailwind utilities on icons. */
+.material-symbols-outlined {
+  font-size: 1.25rem;
+}
+.icon-sm {
+  font-size: 1rem;
+}
+.icon-xs {
+  font-size: 0.875rem;
+}
+
+/* Theme toggle icon swap */
+.theme-icon-dark {
+  display: none;
+}
+.dark .theme-icon-light {
+  display: none;
+}
+.dark .theme-icon-dark {
+  display: inline-block;
+}
+
+/* MFM bios (rendered locally from mfm-js AST in src/lib/mfm.ts) */
+.mfm-bio {
+  overflow-wrap: anywhere;
+}
+.mfm-bio .mfm-paragraph {
+  margin: 0;
+}
+.mfm-bio a {
+  color: hsl(var(--primary));
+  font-weight: 600;
+  text-decoration: none;
+}
+.mfm-bio a:hover {
+  text-decoration: underline;
+}
+.mfm-bio strong {
+  font-weight: 700;
+}
+.mfm-bio del {
+  text-decoration: line-through;
+  opacity: 0.75;
+}
+.mfm-bio small {
+  font-size: 0.82em;
+}
+.mfm-inline-code,
+.mfm-math {
+  border-radius: 6px;
+  background-color: hsl(var(--muted));
+  padding: 0.1em 0.35em;
+  font-family: var(--font-mono);
+  font-size: 0.88em;
+}
+.mfm-code {
+  position: relative;
+  margin: 0.85em 0 0;
+  overflow-x: auto;
+  border: 1px solid hsl(var(--border));
+  border-radius: 12px;
+  background-color: hsl(var(--muted));
+  padding: 0.9em 1em;
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  line-height: 1.55;
+  white-space: pre;
+}
+.mfm-code[data-lang] {
+  padding-top: 1.9em;
+}
+.mfm-code[data-lang]::before {
+  content: attr(data-lang);
+  position: absolute;
+  top: 0.4em;
+  right: 0.8em;
+  color: hsl(var(--muted-foreground));
+  font-size: 0.8em;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.mfm-quote {
+  margin: 0.85em 0 0;
+  border-left: 3px solid hsl(var(--primary) / 0.55);
+  border-radius: 0 10px 10px 0;
+  background-color: hsl(var(--muted) / 0.6);
+  padding: 0.5em 0.9em;
+  color: hsl(var(--foreground) / 0.82);
+}
+.mfm-quote + .mfm-quote {
+  margin-top: 0.5em;
+}
+.mfm-center {
+  margin: 0.6em 0 0;
+  text-align: center;
+}
+.mfm-pos-left {
+  display: inline-block;
+  text-align: left;
+}
+.mfm-pos-right {
+  display: inline-block;
+  text-align: right;
+}
+.mfm-pos-center {
+  display: block;
+  text-align: center;
+}
+.mfm-hashtag,
+.mfm-emoji-code {
+  border-radius: 9999px;
+  background-color: hsl(var(--muted));
+  padding: 0.05em 0.5em;
+  font-size: 0.88em;
+  color: hsl(var(--muted-foreground));
+}
+.mfm-unicode-emoji {
+  font-family: 'Twemoji Mozilla', 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji',
+    sans-serif;
+  font-style: normal;
+}
+.mfm-search {
+  margin-top: 0.6em;
+}
+.mfm-search::before {
+  content: '\1F50D';
+  margin-right: 0.3em;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .mfm-anim {
+    display: inline-block;
+  }
+  .mfm-anim-tada {
+    animation: mfm-tada 1s infinite both;
+  }
+  .mfm-anim-jelly {
+    animation: mfm-jelly 1s infinite both;
+  }
+  .mfm-anim-spin {
+    animation: mfm-spin 1.5s linear infinite both;
+  }
+  .mfm-anim-jump {
+    animation: mfm-jump 1s linear infinite both;
+  }
+  .mfm-anim-bounce {
+    animation: mfm-bounce 1s linear infinite both;
+  }
+  .mfm-anim-blink {
+    animation: mfm-blink 1s linear infinite both;
+  }
+  .mfm-anim-twinkle {
+    animation: mfm-twinkle 1s linear infinite both;
+  }
+  .mfm-anim-shake {
+    animation: mfm-shake 1s linear infinite both;
+  }
+  .mfm-anim-flicker {
+    animation: mfm-flicker 1.5s linear infinite both;
+  }
+  .mfm-anim-rainbow {
+    animation: mfm-rainbow 1s linear infinite both;
+  }
+
+  @keyframes mfm-tada {
+    0% {
+      transform: scale(1) rotate(0);
+    }
+    10%,
+    20% {
+      transform: scale(0.9) rotate(-3deg);
+    }
+    30%,
+    50%,
+    70%,
+    90% {
+      transform: scale(1.1) rotate(3deg);
+    }
+    40%,
+    60%,
+    80% {
+      transform: scale(1.1) rotate(-3deg);
+    }
+    100% {
+      transform: scale(1) rotate(0);
+    }
+  }
+  @keyframes mfm-jelly {
+    0%,
+    100% {
+      transform: scale(1, 1);
+    }
+    25% {
+      transform: scale(0.8, 1.1);
+    }
+    50% {
+      transform: scale(1.1, 0.8);
+    }
+    75% {
+      transform: scale(0.9, 1.05);
+    }
+  }
+  @keyframes mfm-spin {
+    0% {
+      transform: rotate(0);
+    }
+    100% {
+      transform: rotate(360deg);
+    }
+  }
+  @keyframes mfm-jump {
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+    25% {
+      transform: translateY(-8px);
+    }
+    50% {
+      transform: translateY(0);
+    }
+    75% {
+      transform: translateY(-4px);
+    }
+  }
+  @keyframes mfm-bounce {
+    0%,
+    100% {
+      transform: translateY(0) scale(1, 1);
+    }
+    25% {
+      transform: translateY(-6px) scale(1, 1);
+    }
+    50% {
+      transform: translateY(0) scale(1.1, 0.9);
+    }
+  }
+  @keyframes mfm-blink {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.15;
+    }
+  }
+  @keyframes mfm-twinkle {
+    0%,
+    100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 0.6;
+      transform: scale(1.15);
+    }
+  }
+  @keyframes mfm-shake {
+    0%,
+    100% {
+      transform: translateX(0);
+    }
+    20%,
+    60% {
+      transform: translateX(-3px);
+    }
+    40%,
+    80% {
+      transform: translateX(3px);
+    }
+  }
+  @keyframes mfm-flicker {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    45% {
+      opacity: 0.35;
+    }
+    55% {
+      opacity: 0.9;
+    }
+    70% {
+      opacity: 0.5;
+    }
+  }
+  @keyframes mfm-rainbow {
+    0% {
+      filter: hue-rotate(0deg);
+    }
+    100% {
+      filter: hue-rotate(360deg);
+    }
+  }
+}
+
