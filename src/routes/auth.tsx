@@ -12,7 +12,8 @@ import {
   consumeLoginToken,
   getLoginToken,
 } from '../db/queries';
-import { resolveAccount } from '../lib/accounts';
+import { linkIdentity, resolveAccount } from '../lib/accounts';
+import { requireAuth } from '../middleware/auth';
 import { createSession, destroySession } from '../lib/session';
 import { randomToken, sha256Hex } from '../lib/crypto';
 import { magicLinkEmail, getMailer } from '../lib/email';
@@ -94,6 +95,24 @@ authRoutes.get('/auth/github', async (c) => {
   return c.redirect(githubAuthorizeUrl(c.env, state, redirectUri));
 });
 
+/** Starts an OAuth flow that links GitHub to the signed-in account. */
+authRoutes.get('/auth/github/link', requireAuth, async (c) => {
+  if (!githubConfigured(c.env) || !c.get('settings').githubLoginEnabled) {
+    return c.redirect('/dashboard?error=github_unavailable');
+  }
+
+  const user = c.get('user')!;
+  const state = randomToken(16);
+  await c.env.KV.put(
+    `oauth:github:${state}`,
+    JSON.stringify({ next: null, linkUserId: user.id }),
+    { expirationTtl: 600 },
+  );
+
+  const redirectUri = `${appUrl(c.env)}/auth/github/callback`;
+  return c.redirect(githubAuthorizeUrl(c.env, state, redirectUri));
+});
+
 authRoutes.get('/auth/github/callback', async (c) => {
   const state = c.req.query('state');
   const code = c.req.query('code');
@@ -104,8 +123,11 @@ authRoutes.get('/auth/github/callback', async (c) => {
   await c.env.KV.delete(`oauth:github:${state}`);
 
   let next: string | null = null;
+  let linkUserId: string | null = null;
   try {
-    next = (JSON.parse(stored) as { next: string | null }).next;
+    const parsed = JSON.parse(stored) as { next?: string | null; linkUserId?: string | null };
+    next = parsed.next ?? null;
+    linkUserId = parsed.linkUserId ?? null;
   } catch {
     next = null;
   }
@@ -115,6 +137,20 @@ authRoutes.get('/auth/github/callback', async (c) => {
     const accessToken = await exchangeGithubCode(c.env, code, redirectUri);
     const ghUser = await fetchGithubUser(accessToken);
     const email = ghUser.email ?? (await fetchGithubPrimaryEmail(accessToken));
+
+    if (linkUserId) {
+      const current = c.get('user');
+      if (!current || current.id !== linkUserId) {
+        return c.redirect('/dashboard?error=link_failed');
+      }
+      const result = await linkIdentity(c.env.DB, linkUserId, {
+        provider: 'github',
+        providerUserId: String(ghUser.id),
+        email,
+      });
+      if (result === 'taken') return c.redirect('/dashboard?error=github_taken');
+      return c.redirect('/dashboard?saved=github_linked');
+    }
 
     const settings = c.get('settings');
     const user = await resolveAccount(c.env.DB, {
@@ -130,7 +166,7 @@ authRoutes.get('/auth/github/callback', async (c) => {
     return c.redirect(safeNext(next, appUrl(c.env)) ?? landingFor(user));
   } catch (error) {
     console.error('GitHub OAuth failed', error);
-    return c.redirect('/login?error=github_failed');
+    return c.redirect(linkUserId ? '/dashboard?error=link_failed' : '/login?error=github_failed');
   }
 });
 
@@ -210,6 +246,22 @@ authRoutes.get('/auth/email/verify', async (c) => {
   if (!(await consumeLoginToken(c.env.DB, tokenHash))) {
     return c.redirect('/login?error=invalid_token');
   }
+
+  // A link intent (dashboard "connect email") binds the address to the account
+  // that started it instead of signing in as the email owner.
+  const linkUserId = await c.env.KV.get(`link:email:${tokenHash}`);
+  if (linkUserId) await c.env.KV.delete(`link:email:${tokenHash}`);
+  const current = c.get('user');
+  if (linkUserId && current && current.id === linkUserId) {
+    const result = await linkIdentity(c.env.DB, linkUserId, {
+      provider: 'email',
+      providerUserId: row.email,
+      email: row.email,
+    });
+    if (result === 'taken') return c.redirect('/dashboard?error=email_taken');
+    return c.redirect('/dashboard?saved=email_linked');
+  }
+
   const settings = c.get('settings');
   const user = await resolveAccount(c.env.DB, {
     provider: 'email',
