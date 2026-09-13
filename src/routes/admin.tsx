@@ -126,10 +126,14 @@ adminRoutes.post('/admin/settings', async (c) => {
   const faviconRaw = text(body.favicon_url, 500);
   const faviconUrl =
     faviconRaw && !isSafeFaviconUrl(faviconRaw) ? current.faviconUrl : faviconRaw;
+  // Same rule for the nav logo: blank hides the logo.
+  const logoRaw = text(body.logo_url, 500);
+  const logoUrl = logoRaw && !isSafeFaviconUrl(logoRaw) ? current.logoUrl : logoRaw;
 
   await saveSettings(c.env, {
     siteName: text(body.site_name, 60),
     faviconUrl,
+    logoUrl,
     signupsEnabled: is(body.signups_enabled),
     maintenanceMode: is(body.maintenance_mode),
     githubLoginEnabled: is(body.github_login_enabled),
@@ -138,8 +142,11 @@ adminRoutes.post('/admin/settings', async (c) => {
     defaultVisibility: isVisibility(visibility) ? visibility : current.defaultVisibility,
   });
 
-  // Cached profile HTML embeds the favicon <link>, so a change must purge it.
-  if (faviconUrl !== current.faviconUrl) await invalidateAllProfiles(c.env.KV);
+  // Cached profile HTML embeds the favicon <link> and the nav logo, so a
+  // change to either must purge it.
+  if (faviconUrl !== current.faviconUrl || logoUrl !== current.logoUrl) {
+    await invalidateAllProfiles(c.env.KV);
+  }
 
   return c.redirect('/admin?saved=settings');
 });

@@ -14,6 +14,7 @@ import type { Locale, TranslateFn } from '../i18n';
 export interface ProfileProps {
   appName: string;
   faviconUrl: string;
+  logoUrl: string;
   user: UserRow;
   fields: FieldRow[];
   tags: UserTagRow[];
@@ -48,6 +49,7 @@ const SHARE_SCRIPT = (s: Record<string, string>) =>
 export function Profile({
   appName,
   faviconUrl,
+  logoUrl,
   user,
   fields,
   tags,
@@ -73,6 +75,7 @@ export function Profile({
     <Layout
       appName={appName}
       faviconUrl={faviconUrl}
+      logoUrl={logoUrl}
       title={name}
       description={description}
       csrfToken={csrfToken}

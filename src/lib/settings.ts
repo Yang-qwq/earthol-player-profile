@@ -10,6 +10,7 @@ import { appName } from './env';
 export interface SiteSettings {
   siteName: string;
   faviconUrl: string;
+  logoUrl: string;
   signupsEnabled: boolean;
   maintenanceMode: boolean;
   githubLoginEnabled: boolean;
@@ -24,6 +25,7 @@ const CACHE_TTL = 60;
 const KEY = {
   siteName: 'site_name',
   faviconUrl: 'favicon_url',
+  logoUrl: 'logo_url',
   signups: 'signups_enabled',
   maintenance: 'maintenance_mode',
   github: 'github_login_enabled',
@@ -35,6 +37,7 @@ const KEY = {
 const DEFAULTS: SiteSettings = {
   siteName: '',
   faviconUrl: '',
+  logoUrl: '',
   signupsEnabled: true,
   maintenanceMode: false,
   githubLoginEnabled: true,
@@ -70,6 +73,7 @@ export async function getSettings(env: Env): Promise<SiteSettings> {
   const settings: SiteSettings = {
     siteName: map[KEY.siteName] ?? '',
     faviconUrl: map[KEY.faviconUrl] ?? DEFAULTS.faviconUrl,
+    logoUrl: map[KEY.logoUrl] ?? DEFAULTS.logoUrl,
     signupsEnabled: toBool(map[KEY.signups], DEFAULTS.signupsEnabled),
     maintenanceMode: toBool(map[KEY.maintenance], DEFAULTS.maintenanceMode),
     githubLoginEnabled: toBool(map[KEY.github], DEFAULTS.githubLoginEnabled),
@@ -92,6 +96,7 @@ export async function saveSettings(env: Env, settings: SiteSettings): Promise<vo
   await writeSettings(env.DB, {
     [KEY.siteName]: settings.siteName,
     [KEY.faviconUrl]: settings.faviconUrl,
+    [KEY.logoUrl]: settings.logoUrl,
     [KEY.signups]: settings.signupsEnabled ? '1' : '0',
     [KEY.maintenance]: settings.maintenanceMode ? '1' : '0',
     [KEY.github]: settings.githubLoginEnabled ? '1' : '0',

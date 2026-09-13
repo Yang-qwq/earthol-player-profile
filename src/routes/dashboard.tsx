@@ -136,6 +136,7 @@ dashboardRoutes.get('/dashboard', async (c) => {
     <Dashboard
       appName={c.get('appName')}
       faviconUrl={c.get('settings').faviconUrl}
+      logoUrl={c.get('settings').logoUrl}
       csrfToken={c.get('csrfToken')}
       user={user}
       gravatarUrl={await gravatarAvatarUrl(user.email, c.env.GRAVATAR_MIRROR)}
