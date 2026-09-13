@@ -198,6 +198,8 @@ export const en = {
   'admin.settings.siteNameHint': 'Leave blank to use the deployed app name.',
   'admin.settings.favicon': 'Favicon URL',
   'admin.settings.faviconHint': 'Absolute http(s) URL or a root-relative path. Leave blank for the default.',
+  'admin.settings.logo': 'Logo image URL',
+  'admin.settings.logoHint': 'Shown in the navigation. Absolute http(s) URL or a root-relative path. Leave blank to show no logo.',
   'admin.settings.signups': 'Allow new sign-ups',
   'admin.settings.maintenance': 'Maintenance mode',
   'admin.settings.github': 'GitHub sign-in enabled',

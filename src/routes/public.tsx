@@ -21,6 +21,7 @@ publicRoutes.get('/', (c) => {
     <Layout
       appName={c.get('appName')}
       faviconUrl={c.get('settings').faviconUrl}
+      logoUrl={c.get('settings').logoUrl}
       csrfToken={c.get('csrfToken')}
       currentUser={navUser(c.get('user'))}
       nonce={c.get('secureHeadersNonce')}
@@ -79,6 +80,7 @@ publicRoutes.get('/:username', async (c) => {
     <Profile
       appName={c.get('appName')}
       faviconUrl={c.get('settings').faviconUrl}
+      logoUrl={c.get('settings').logoUrl}
       user={user}
       fields={fields}
       tags={visibleTags}

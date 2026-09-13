@@ -198,6 +198,8 @@ export const zh: Record<keyof typeof en, string> = {
   'admin.settings.siteNameHint': '留空则使用部署的应用名称。',
   'admin.settings.favicon': '站点图标 URL',
   'admin.settings.faviconHint': '绝对 http(s) 链接或根路径（如 /favicon.ico）。留空使用默认图标。',
+  'admin.settings.logo': 'Logo 图片 URL',
+  'admin.settings.logoHint': '显示在导航栏中。绝对 http(s) 链接或根路径。留空则不显示图标。',
   'admin.settings.signups': '允许新注册',
   'admin.settings.maintenance': '维护模式',
   'admin.settings.github': '启用 GitHub 登录',

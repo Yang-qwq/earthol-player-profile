@@ -62,6 +62,7 @@ export function AdminView({
     <Layout
       appName={appName}
       faviconUrl={settings.faviconUrl}
+      logoUrl={settings.logoUrl}
       title={t('admin.title')}
       shell="console"
       csrfToken={csrfToken}
@@ -135,6 +136,22 @@ export function AdminView({
               />
               <p class="mt-1 px-1 text-xs text-muted-foreground">
                 {t('admin.settings.faviconHint')}
+              </p>
+            </div>
+            <div>
+              <label class="label" for="logo_url">
+                {t('admin.settings.logo')}
+              </label>
+              <input
+                id="logo_url"
+                name="logo_url"
+                value={settings.logoUrl}
+                maxlength={500}
+                placeholder="https://example.com/logo.png"
+                class="field"
+              />
+              <p class="mt-1 px-1 text-xs text-muted-foreground">
+                {t('admin.settings.logoHint')}
               </p>
             </div>
           </div>

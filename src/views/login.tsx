@@ -5,6 +5,7 @@ import type { Locale, TranslateFn } from '../i18n';
 export interface LoginProps {
   appName: string;
   faviconUrl: string;
+  logoUrl: string;
   csrfToken: string;
   githubEnabled: boolean;
   magicEnabled?: boolean;
@@ -20,6 +21,7 @@ export interface LoginProps {
 export function Login({
   appName,
   faviconUrl,
+  logoUrl,
   csrfToken,
   githubEnabled,
   magicEnabled = true,
@@ -35,6 +37,7 @@ export function Login({
     <Layout
       appName={appName}
       faviconUrl={faviconUrl}
+      logoUrl={logoUrl}
       title={t('login.title')}
       nonce={nonce}
       t={t}

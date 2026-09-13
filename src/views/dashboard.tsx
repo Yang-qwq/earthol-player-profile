@@ -8,6 +8,7 @@ import type { Locale, MessageKey, TranslateFn } from '../i18n';
 export interface DashboardProps {
   appName: string;
   faviconUrl: string;
+  logoUrl: string;
   csrfToken: string;
   user: UserRow;
   gravatarUrl: string;
@@ -29,6 +30,7 @@ export interface DashboardProps {
 export function Dashboard({
   appName,
   faviconUrl,
+  logoUrl,
   csrfToken,
   user,
   gravatarUrl,
@@ -53,6 +55,7 @@ export function Dashboard({
     <Layout
       appName={appName}
       faviconUrl={faviconUrl}
+      logoUrl={logoUrl}
       title={t('dash.title')}
       shell="console"
       csrfToken={csrfToken}

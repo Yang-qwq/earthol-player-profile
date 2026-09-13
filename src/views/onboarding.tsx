@@ -5,6 +5,7 @@ import type { Locale, TranslateFn } from '../i18n';
 export interface OnboardingProps {
   appName: string;
   faviconUrl: string;
+  logoUrl: string;
   csrfToken: string;
   error?: string;
   username?: string;
@@ -18,6 +19,7 @@ export interface OnboardingProps {
 export function Onboarding({
   appName,
   faviconUrl,
+  logoUrl,
   csrfToken,
   error,
   username = '',
@@ -31,6 +33,7 @@ export function Onboarding({
     <Layout
       appName={appName}
       faviconUrl={faviconUrl}
+      logoUrl={logoUrl}
       title={t('onboard.title')}
       nonce={nonce}
       t={t}

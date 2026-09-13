@@ -12,6 +12,7 @@ export interface LayoutProps {
   description?: string;
   appName: string;
   faviconUrl: string;
+  logoUrl?: string;
   currentUser?: { username: string; displayName?: string | null } | null;
   csrfToken?: string;
   robots?: string;
@@ -64,18 +65,25 @@ const GRAVATAR_SCRIPT = `(function(){document.addEventListener('click',function(
 
 function Logo({
   appName,
+  logoUrl,
   href = '/',
   hideTextOnMobile = false,
 }: {
   appName: string;
+  logoUrl?: string;
   href?: string;
   hideTextOnMobile?: boolean;
 }) {
+  const hasLogo = Boolean(logoUrl && isSafeFaviconUrl(logoUrl));
   return (
     <a href={href} class="flex min-w-0 items-center gap-2.5">
-      <span class="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-primary to-secondary text-sm font-bold text-primary-foreground shadow-sm">
-        EO
-      </span>
+      {hasLogo ? (
+        <img
+          src={logoUrl}
+          alt=""
+          class="h-9 w-9 shrink-0 rounded-xl object-cover shadow-sm"
+        />
+      ) : null}
       <span
         class={`whitespace-nowrap text-base font-bold tracking-tight ${hideTextOnMobile ? 'hidden sm:inline' : ''
           }`}
@@ -159,6 +167,7 @@ export function Layout({
   description,
   appName,
   faviconUrl,
+  logoUrl,
   currentUser,
   csrfToken,
   robots,
@@ -218,6 +227,7 @@ export function Layout({
         {shell === 'console' ? (
           <ConsoleShell
             appName={appName}
+            logoUrl={logoUrl}
             title={title}
             currentUser={currentUser}
             csrfToken={csrfToken}
@@ -231,6 +241,7 @@ export function Layout({
         ) : (
           <PageShell
             appName={appName}
+            logoUrl={logoUrl}
             currentUser={currentUser}
             csrfToken={csrfToken}
             t={t}
@@ -273,6 +284,7 @@ function UserMenu({
 
 function PageShell({
   appName,
+  logoUrl,
   currentUser,
   csrfToken,
   t,
@@ -281,6 +293,7 @@ function PageShell({
   children,
 }: PropsWithChildren<{
   appName: string;
+  logoUrl?: string;
   currentUser?: LayoutProps['currentUser'];
   csrfToken?: string;
   t: TranslateFn;
@@ -291,7 +304,7 @@ function PageShell({
     <div class="flex min-h-full flex-col">
       <header class="sticky top-0 z-30 border-b border-border/60 bg-background/70 backdrop-blur-xl">
         <div class="mx-auto flex h-16 w-full max-w-5xl items-center justify-between px-4">
-          <Logo appName={appName} hideTextOnMobile />
+          <Logo appName={appName} logoUrl={logoUrl} hideTextOnMobile />
           <nav class="flex items-center gap-1 text-sm">
             {currentUser?.username ? (
               <a class="hidden text-muted-foreground transition hover:text-foreground sm:inline-flex" href={`/${currentUser.username}`}>
@@ -347,6 +360,7 @@ function PageShell({
 
 function ConsoleShell({
   appName,
+  logoUrl,
   title,
   currentUser,
   csrfToken,
@@ -357,6 +371,7 @@ function ConsoleShell({
   children,
 }: PropsWithChildren<{
   appName: string;
+  logoUrl?: string;
   title?: string;
   currentUser?: LayoutProps['currentUser'];
   csrfToken?: string;
@@ -385,7 +400,7 @@ function ConsoleShell({
         class="console-nav fixed inset-y-0 left-0 z-50 flex w-72 shrink-0 flex-col border-r border-border bg-card shadow-pop transition-transform duration-200 lg:static lg:z-auto lg:shadow-none"
       >
         <div class="flex h-16 items-center justify-between px-5">
-          <Logo appName={appName} />
+          <Logo appName={appName} logoUrl={logoUrl} />
           <button
             type="button"
             class="btn-icon lg:hidden"

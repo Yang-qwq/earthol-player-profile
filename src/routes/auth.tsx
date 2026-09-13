@@ -67,6 +67,7 @@ authRoutes.get('/login', (c) => {
     <Login
       appName={c.get('appName')}
       faviconUrl={settings.faviconUrl}
+      logoUrl={settings.logoUrl}
       csrfToken={c.get('csrfToken')}
       githubEnabled={githubConfigured(c.env) && settings.githubLoginEnabled}
       magicEnabled={settings.magicLinkEnabled}
@@ -183,6 +184,7 @@ authRoutes.post('/auth/email', async (c) => {
       <Login
         appName={c.get('appName')}
         faviconUrl={settings.faviconUrl}
+        logoUrl={settings.logoUrl}
         csrfToken={c.get('csrfToken')}
         githubEnabled={githubConfigured(c.env) && settings.githubLoginEnabled}
         magicEnabled={settings.magicLinkEnabled}
