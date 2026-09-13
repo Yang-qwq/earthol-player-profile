@@ -181,6 +181,14 @@ export function findIdentity(
     .first<IdentityRow>();
 }
 
+export async function listIdentities(db: D1Database, userId: string): Promise<IdentityRow[]> {
+  const result = await db
+    .prepare('SELECT * FROM identities WHERE user_id = ? ORDER BY created_at ASC')
+    .bind(userId)
+    .all<IdentityRow>();
+  return result.results ?? [];
+}
+
 export async function createIdentity(
   db: D1Database,
   input: { userId: string; provider: string; providerUserId: string; email?: string | null },

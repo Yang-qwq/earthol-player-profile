@@ -1,6 +1,6 @@
 /** Console workspace: profile sheet, key/value fields, and tags. */
 import { Layout } from './layout';
-import type { FieldRow, TagCategoryRow, UserRow, UserTagRow } from '../db/types';
+import type { FieldRow, IdentityRow, TagCategoryRow, UserRow, UserTagRow } from '../db/types';
 import { THEMES, VISIBILITIES } from '../lib/themes';
 import { tagChipClasses } from '../lib/tags';
 import type { Locale, MessageKey, TranslateFn } from '../i18n';
@@ -14,6 +14,9 @@ export interface DashboardProps {
   fields: FieldRow[];
   tags: UserTagRow[];
   tagCategories: TagCategoryRow[];
+  identities: IdentityRow[];
+  githubEnabled: boolean;
+  magicEnabled: boolean;
   error?: string;
   message?: string;
   nonce?: string;
@@ -32,6 +35,9 @@ export function Dashboard({
   fields,
   tags,
   tagCategories,
+  identities,
+  githubEnabled,
+  magicEnabled,
   error,
   message,
   nonce,
@@ -40,6 +46,9 @@ export function Dashboard({
   pathname,
   isAdmin,
 }: DashboardProps) {
+  const githubIdentity = identities.find((identity) => identity.provider === 'github');
+  const emailIdentity = identities.find((identity) => identity.provider === 'email');
+
   return (
     <Layout
       appName={appName}
@@ -167,6 +176,96 @@ export function Dashboard({
             </button>
           </div>
         </form>
+
+        <section class="card p-6">
+          <div class="mb-5">
+            <h2 class="text-lg font-bold tracking-tight">{t('dash.accountsHeading')}</h2>
+            <p class="mt-0.5 text-sm text-muted-foreground">{t('dash.accountsSubtitle')}</p>
+          </div>
+
+          <div class="space-y-3">
+            <div class="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-muted px-4 py-3">
+              <div class="flex min-w-0 items-center gap-3">
+                <span class="material-symbols-outlined text-muted-foreground" aria-hidden="true">
+                  code
+                </span>
+                <div class="min-w-0">
+                  <p class="text-sm font-semibold">{t('dash.account.github')}</p>
+                  <p class="truncate text-xs text-muted-foreground">
+                    {githubIdentity
+                      ? githubIdentity.email ?? t('dash.account.connected')
+                      : t('dash.account.notConnected')}
+                  </p>
+                </div>
+              </div>
+              {githubIdentity ? (
+                <span class="rounded-full bg-success/10 px-3 py-1 text-xs font-semibold text-success ring-1 ring-inset ring-success/25">
+                  {t('dash.account.connected')}
+                </span>
+              ) : githubEnabled ? (
+                <a href="/auth/github/link" class="btn-outline shrink-0">
+                  <span class="material-symbols-outlined icon-sm" aria-hidden="true">
+                    link
+                  </span>
+                  {t('dash.account.connectGithub')}
+                </a>
+              ) : (
+                <span class="text-xs text-muted-foreground">{t('dash.account.notConfigured')}</span>
+              )}
+            </div>
+
+            <div class="rounded-2xl bg-muted px-4 py-3">
+              <div class="flex flex-wrap items-center justify-between gap-3">
+                <div class="flex min-w-0 items-center gap-3">
+                  <span class="material-symbols-outlined text-muted-foreground" aria-hidden="true">
+                    mail
+                  </span>
+                  <div class="min-w-0">
+                    <p class="text-sm font-semibold">{t('dash.account.email')}</p>
+                    <p class="truncate text-xs text-muted-foreground">
+                      {emailIdentity
+                        ? emailIdentity.provider_user_id
+                        : t('dash.account.notConnected')}
+                    </p>
+                  </div>
+                </div>
+                {emailIdentity ? (
+                  <span class="rounded-full bg-success/10 px-3 py-1 text-xs font-semibold text-success ring-1 ring-inset ring-success/25">
+                    {t('dash.account.connected')}
+                  </span>
+                ) : null}
+              </div>
+
+              {!emailIdentity && magicEnabled ? (
+                <form
+                  method="post"
+                  action="/dashboard/identities/email"
+                  class="mt-3 flex flex-col gap-2 sm:flex-row"
+                >
+                  <input type="hidden" name="_csrf" value={csrfToken} />
+                  <input
+                    type="email"
+                    name="email"
+                    required
+                    autocomplete="email"
+                    placeholder="you@example.com"
+                    class="field min-w-0 flex-1"
+                  />
+                  <button type="submit" class="btn-outline shrink-0">
+                    <span class="material-symbols-outlined icon-sm" aria-hidden="true">
+                      forward_to_inbox
+                    </span>
+                    {t('dash.account.connectEmail')}
+                  </button>
+                </form>
+              ) : null}
+
+              {!emailIdentity && !magicEnabled ? (
+                <p class="mt-2 text-xs text-muted-foreground">{t('dash.account.notConfigured')}</p>
+              ) : null}
+            </div>
+          </div>
+        </section>
 
         <form method="post" action="/dashboard/fields" class="card p-6" data-repeater>
           <input type="hidden" name="_csrf" value={csrfToken} />

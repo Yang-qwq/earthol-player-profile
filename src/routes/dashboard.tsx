@@ -8,9 +8,12 @@ import type { AppContext } from '../types';
 import { Dashboard } from '../views/dashboard';
 import type { FieldInput, TagInput } from '../db/types';
 import {
+  createLoginToken,
+  getUserByEmail,
   isUsernameReserved,
   isUsernameTakenByOther,
   listFields,
+  listIdentities,
   listTagCategories,
   listUserTags,
   replaceFields,
@@ -20,8 +23,20 @@ import {
 import { requireAuth } from '../middleware/auth';
 import { invalidateProfiles } from '../lib/profile-cache';
 import { gravatarAvatarUrl } from '../lib/gravatar';
+import { githubConfigured } from '../lib/oauth-github';
 import { isTheme, isVisibility } from '../lib/themes';
-import { isSafeUrl, isValidUsername, normalizeUsername, text } from '../lib/validate';
+import {
+  isSafeUrl,
+  isValidEmail,
+  isValidUsername,
+  normalizeEmail,
+  normalizeUsername,
+  text,
+} from '../lib/validate';
+import { randomToken, sha256Hex } from '../lib/crypto';
+import { getMailer, magicLinkEmail } from '../lib/email';
+import { clientIp, rateLimit } from '../lib/ratelimit';
+import { appUrl } from '../lib/env';
 import type { TranslateFn } from '../i18n';
 
 export const dashboardRoutes = new Hono<AppContext>();
@@ -31,6 +46,7 @@ const MAX_FIELD_LABEL = 40;
 const MAX_FIELD_VALUE = 300;
 const MAX_TAGS = 20;
 const MAX_TAG_VALUE = 40;
+const LINK_TTL_SECONDS = 15 * 60;
 
 dashboardRoutes.use('/dashboard', requireAuth);
 dashboardRoutes.use('/dashboard/*', requireAuth);
@@ -55,6 +71,22 @@ function errorMessage(code: string | undefined, t: TranslateFn): string | undefi
       return t('dash.err.tooManyTags', { max: String(MAX_TAGS) });
     case 'unknown_tag_category':
       return t('dash.err.unknownTagCategory');
+    case 'invalid_email':
+      return t('auth.err.invalidEmail');
+    case 'rate_limited':
+      return t('auth.err.rateLimited');
+    case 'send_failed':
+      return t('auth.err.sendFailed');
+    case 'magic_disabled':
+      return t('auth.err.magicDisabled');
+    case 'github_unavailable':
+      return t('login.githubUnavailable');
+    case 'github_taken':
+      return t('dash.err.githubTaken');
+    case 'email_taken':
+      return t('dash.err.emailTaken');
+    case 'link_failed':
+      return t('dash.err.linkFailed');
     default:
       return undefined;
   }
@@ -77,10 +109,12 @@ dashboardRoutes.get('/dashboard', async (c) => {
   if (!user.username) return c.redirect('/onboarding');
 
   const t = c.get('t');
-  const [fields, tags, tagCategories] = await Promise.all([
+  const settings = c.get('settings');
+  const [fields, tags, tagCategories, identities] = await Promise.all([
     listFields(c.env.DB, user.id),
     listUserTags(c.env.DB, user.id),
     listTagCategories(c.env.DB),
+    listIdentities(c.env.DB, user.id),
   ]);
   const saved = c.req.query('saved');
   const message =
@@ -90,7 +124,13 @@ dashboardRoutes.get('/dashboard', async (c) => {
         ? t('dash.savedFields')
         : saved === 'tags'
           ? t('dash.savedTags')
-          : undefined;
+          : saved === 'github_linked'
+            ? t('dash.saved.githubLinked')
+            : saved === 'email_linked'
+              ? t('dash.saved.emailLinked')
+              : saved === 'email_sent'
+                ? t('dash.saved.emailSent')
+                : undefined;
 
   return c.html(
     <Dashboard
@@ -102,6 +142,9 @@ dashboardRoutes.get('/dashboard', async (c) => {
       fields={fields}
       tags={tags}
       tagCategories={tagCategories}
+      identities={identities}
+      githubEnabled={githubConfigured(c.env) && settings.githubLoginEnabled}
+      magicEnabled={settings.magicLinkEnabled}
       message={message}
       error={errorMessage(c.req.query('error'), t)}
       nonce={c.get('secureHeadersNonce')}
@@ -212,4 +255,50 @@ dashboardRoutes.post('/dashboard/tags', async (c) => {
   await replaceUserTags(c.env.DB, user.id, tags);
   await invalidateProfiles(c.env.KV, [user.username]);
   return c.redirect('/dashboard?saved=tags');
+});
+
+/** Emails a magic link that binds the address to the signed-in account. */
+dashboardRoutes.post('/dashboard/identities/email', async (c) => {
+  const user = c.get('user')!;
+  const settings = c.get('settings');
+  if (!settings.magicLinkEnabled) return c.redirect('/dashboard?error=magic_disabled');
+
+  const body = await c.req.parseBody();
+  const rawEmail = typeof body.email === 'string' ? body.email : '';
+  if (!isValidEmail(rawEmail)) return c.redirect('/dashboard?error=invalid_email');
+  const email = normalizeEmail(rawEmail);
+
+  const owner = await getUserByEmail(c.env.DB, email);
+  if (owner && owner.id !== user.id) return c.redirect('/dashboard?error=email_taken');
+
+  const ip = clientIp(c.req.raw.headers);
+  const [ipLimit, emailLimit] = await Promise.all([
+    rateLimit(c.env.KV, `email:ip:${ip}`, 10, 3600),
+    rateLimit(c.env.KV, `email:addr:${email}`, 5, 3600),
+  ]);
+  if (!ipLimit.allowed || !emailLimit.allowed) {
+    return c.redirect('/dashboard?error=rate_limited');
+  }
+
+  const token = randomToken(32);
+  const tokenHash = await sha256Hex(token);
+  await createLoginToken(c.env.DB, {
+    tokenHash,
+    email,
+    expiresAt: Date.now() + LINK_TTL_SECONDS * 1000,
+  });
+  await c.env.KV.put(`link:email:${tokenHash}`, user.id, { expirationTtl: LINK_TTL_SECONDS });
+
+  const link = `${appUrl(c.env)}/auth/email/verify?token=${encodeURIComponent(token)}`;
+  try {
+    await getMailer(c.env).send({
+      to: email,
+      ...magicLinkEmail(c.get('t'), link, c.get('appName')),
+    });
+  } catch (error) {
+    console.error('Account link email failed', error);
+    return c.redirect('/dashboard?error=send_failed');
+  }
+
+  return c.redirect('/dashboard?saved=email_sent');
 });

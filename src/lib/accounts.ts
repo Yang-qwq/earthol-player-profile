@@ -55,3 +55,34 @@ export async function resolveAccount(
 
   return user;
 }
+
+export type LinkIdentityResult = 'linked' | 'already_linked' | 'taken';
+
+/**
+ * Attach an external identity to an existing account (explicit "connect" from
+ * the dashboard). Refuses when the provider id is already linked elsewhere or
+ * when the verified email belongs to a different account, so a link can never
+ * hijack another profile.
+ */
+export async function linkIdentity(
+  db: D1Database,
+  userId: string,
+  params: { provider: string; providerUserId: string; email?: string | null },
+): Promise<LinkIdentityResult> {
+  const existing = await findIdentity(db, params.provider, params.providerUserId);
+  if (existing) return existing.user_id === userId ? 'already_linked' : 'taken';
+
+  const email = params.email?.toLowerCase() ?? null;
+  if (email) {
+    const owner = await getUserByEmail(db, email);
+    if (owner && owner.id !== userId) return 'taken';
+  }
+
+  await createIdentity(db, {
+    userId,
+    provider: params.provider,
+    providerUserId: params.providerUserId,
+    email,
+  });
+  return 'linked';
+}
