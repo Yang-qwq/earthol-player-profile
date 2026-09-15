@@ -15,6 +15,10 @@ export const zh: Record<keyof typeof en, string> = {
   'nav.publicProfile': '公开主页',
   'nav.workspace': '工作区',
   'nav.profile': '个人资料',
+  'dash.field.moveUp': '上移字段',
+  'dash.field.moveDown': '下移字段',
+  'dash.tag.moveUp': '上移标签',
+  'dash.tag.moveDown': '下移标签',
 
   'action.toggleTheme': '切换主题',
   'action.openMenu': '打开菜单',
