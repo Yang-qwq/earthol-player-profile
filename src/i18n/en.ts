@@ -13,6 +13,10 @@ export const en = {
   'nav.publicProfile': 'Public profile',
   'nav.workspace': 'Workspace',
   'nav.profile': 'Profile',
+  'dash.field.moveUp': 'Move field up',
+  'dash.field.moveDown': 'Move field down',
+  'dash.tag.moveUp': 'Move tag up',
+  'dash.tag.moveDown': 'Move tag down',
 
   'action.toggleTheme': 'Toggle theme',
   'action.openMenu': 'Open menu',

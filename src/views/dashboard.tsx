@@ -280,17 +280,71 @@ export function Dashboard({
 
           <div data-repeater-list>
             {fields.map((field) => (
+<div class="mb-2 flex flex-col gap-2 sm:flex-row" data-repeater-row>
+                  <input
+                    name="label"
+                    value={field.label}
+                    placeholder={t('dash.fieldLabelPlaceholder')}
+                    maxlength={40}
+                    class="field sm:w-1/3"
+                  />
+                  <input
+                    name="value"
+                    value={field.value}
+                    placeholder={t('dash.fieldValuePlaceholder')}
+                    maxlength={300}
+                    class="field"
+                  />
+                  <button
+                    type="button"
+                    data-repeater-remove
+                    class="btn-outline shrink-0 border-danger/30 px-4 text-danger hover:bg-danger/10"
+                  >
+                    {t('dash.remove')}
+                  </button>
+                  <button
+                    type="button"
+                    data-repeater-move-up
+                    class="btn-icon shrink-0 text-muted-foreground hover:text-foreground"
+                    aria-label={t('dash.field.moveUp')}
+                    title={t('dash.field.moveUp')}
+                  >
+                    <span class="material-symbols-outlined" aria-hidden="true">
+                      arrow_upward
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    data-repeater-move-down
+                    class="btn-icon shrink-0 text-muted-foreground hover:text-foreground"
+                    aria-label={t('dash.field.moveDown')}
+                    title={t('dash.field.moveDown')}
+                  >
+                    <span class="material-symbols-outlined" aria-hidden="true">
+                      arrow_downward
+                    </span>
+                  </button>
+                </div>
+            ))}
+          </div>
+
+          <p
+            data-repeater-empty
+            class={`rounded-2xl bg-muted px-4 py-3 text-sm text-muted-foreground ${fields.length ? 'hidden' : ''}`}
+          >
+            {t('dash.noFields')}
+          </p>
+
+<template data-repeater-template>
               <div class="mb-2 flex flex-col gap-2 sm:flex-row" data-repeater-row>
                 <input
                   name="label"
-                  value={field.label}
                   placeholder={t('dash.fieldLabelPlaceholder')}
                   maxlength={40}
                   class="field sm:w-1/3"
                 />
                 <input
                   name="value"
-                  value={field.value}
                   placeholder={t('dash.fieldValuePlaceholder')}
                   maxlength={300}
                   class="field"
@@ -302,40 +356,30 @@ export function Dashboard({
                 >
                   {t('dash.remove')}
                 </button>
+                <button
+                  type="button"
+                  data-repeater-move-up
+                  class="btn-icon shrink-0 text-muted-foreground hover:text-foreground"
+                  aria-label={t('dash.field.moveUp')}
+                  title={t('dash.field.moveUp')}
+                >
+                  <span class="material-symbols-outlined" aria-hidden="true">
+                    arrow_upward
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  data-repeater-move-down
+                  class="btn-icon shrink-0 text-muted-foreground hover:text-foreground"
+                  aria-label={t('dash.field.moveDown')}
+                  title={t('dash.field.moveDown')}
+                >
+                  <span class="material-symbols-outlined" aria-hidden="true">
+                    arrow_downward
+                  </span>
+                </button>
               </div>
-            ))}
-          </div>
-
-          <p
-            data-repeater-empty
-            class={`rounded-2xl bg-muted px-4 py-3 text-sm text-muted-foreground ${fields.length ? 'hidden' : ''}`}
-          >
-            {t('dash.noFields')}
-          </p>
-
-          <template data-repeater-template>
-            <div class="mb-2 flex flex-col gap-2 sm:flex-row" data-repeater-row>
-              <input
-                name="label"
-                placeholder={t('dash.fieldLabelPlaceholder')}
-                maxlength={40}
-                class="field sm:w-1/3"
-              />
-              <input
-                name="value"
-                placeholder={t('dash.fieldValuePlaceholder')}
-                maxlength={300}
-                class="field"
-              />
-              <button
-                type="button"
-                data-repeater-remove
-                class="btn-outline shrink-0 border-danger/30 px-4 text-danger hover:bg-danger/10"
-              >
-                {t('dash.remove')}
-              </button>
-            </div>
-          </template>
+            </template>
 
           <div class="mt-5 flex flex-wrap gap-3">
             <button type="button" data-repeater-add class="btn-outline">
@@ -379,34 +423,56 @@ export function Dashboard({
             <>
               <div data-repeater-list>
                 {tags.map((tag) => (
-                  <div class="mb-2 flex flex-col gap-2 sm:flex-row" data-repeater-row>
-                    <div class="relative sm:w-1/2">
-                      <input
-                        name="tag"
-                        value={tag.value}
-                        placeholder={t('dash.tagPlaceholder')}
-                        maxlength={40}
-                        autocomplete="off"
-                        data-tag-input
-                        class="field w-full"
-                      />
-                    </div>
-                    <select name="category_id" data-tag-category class="field sm:w-1/3">
-                      {tagCategories.map((category) => (
-                        <option value={category.id} selected={category.id === tag.category_id}>
-                          {category.name}
-                        </option>
-                      ))}
-                    </select>
-                    <TagHiddenToggle hidden={Boolean(tag.hidden)} label={t('dash.tagHidden')} />
-                    <button
-                      type="button"
-                      data-repeater-remove
-                      class="btn-outline shrink-0 border-danger/30 px-4 text-danger hover:bg-danger/10"
-                    >
-                      {t('dash.remove')}
-                    </button>
+<div class="mb-2 flex flex-col gap-2 sm:flex-row" data-repeater-row>
+                  <div class="relative sm:w-1/2">
+                    <input
+                      name="tag"
+                      value={tag.value}
+                      placeholder={t('dash.tagPlaceholder')}
+                      maxlength={40}
+                      autocomplete="off"
+                      data-tag-input
+                      class="field w-full"
+                    />
                   </div>
+                  <select name="category_id" data-tag-category class="field sm:w-1/3">
+                    {tagCategories.map((category) => (
+                      <option value={category.id} selected={category.id === tag.category_id}>
+                        {category.name}
+                      </option>
+                    ))}
+                  </select>
+                  <TagHiddenToggle hidden={Boolean(tag.hidden)} label={t('dash.tagHidden')} />
+                  <button
+                    type="button"
+                    data-repeater-remove
+                    class="btn-outline shrink-0 border-danger/30 px-4 text-danger hover:bg-danger/10"
+                  >
+                    {t('dash.remove')}
+                  </button>
+                  <button
+                    type="button"
+                    data-repeater-move-up
+                    class="btn-icon shrink-0 text-muted-foreground hover:text-foreground"
+                    aria-label={t('dash.tag.moveUp')}
+                    title={t('dash.tag.moveUp')}
+                  >
+                    <span class="material-symbols-outlined" aria-hidden="true">
+                      arrow_upward
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    data-repeater-move-down
+                    class="btn-icon shrink-0 text-muted-foreground hover:text-foreground"
+                    aria-label={t('dash.tag.moveDown')}
+                    title={t('dash.tag.moveDown')}
+                  >
+                    <span class="material-symbols-outlined" aria-hidden="true">
+                      arrow_downward
+                    </span>
+                  </button>
+                </div>
                 ))}
               </div>
 
@@ -433,7 +499,7 @@ export function Dashboard({
                     {tagCategories.map((category, index) => (
                       <option value={category.id} selected={index === 0}>
                         {category.name}
-                      </option>
+                    </option>
                     ))}
                   </select>
                   <TagHiddenToggle hidden={false} label={t('dash.tagHidden')} />
@@ -443,6 +509,28 @@ export function Dashboard({
                     class="btn-outline shrink-0 border-danger/30 px-4 text-danger hover:bg-danger/10"
                   >
                     {t('dash.remove')}
+                  </button>
+                  <button
+                    type="button"
+                    data-repeater-move-up
+                    class="btn-icon shrink-0 text-muted-foreground hover:text-foreground"
+                    aria-label={t('dash.tag.moveUp')}
+                    title={t('dash.tag.moveUp')}
+                  >
+                    <span class="material-symbols-outlined" aria-hidden="true">
+                      arrow_upward
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    data-repeater-move-down
+                    class="btn-icon shrink-0 text-muted-foreground hover:text-foreground"
+                    aria-label={t('dash.tag.moveDown')}
+                    title={t('dash.tag.moveDown')}
+                  >
+                    <span class="material-symbols-outlined" aria-hidden="true">
+                      arrow_downward
+                    </span>
                   </button>
                 </div>
               </template>
