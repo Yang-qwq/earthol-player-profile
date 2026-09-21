@@ -82,6 +82,8 @@ export const zh: Record<keyof typeof en, string> = {
   'dash.fieldLabelPlaceholder': '名称',
   'dash.fieldValuePlaceholder': '值',
   'dash.remove': '移除',
+  'dash.field.remove': '移除字段',
+  'dash.tag.remove': '移除标签',
   'dash.noFields': '还没有字段。',
   'dash.addField': '添加字段',
   'dash.saveFields': '保存字段',

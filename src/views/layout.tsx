@@ -397,7 +397,7 @@ function ConsoleShell({
 
       <aside
         id="mobile-nav"
-        class="console-nav fixed inset-y-0 left-0 z-50 flex w-72 shrink-0 flex-col border-r border-border bg-card shadow-pop transition-transform duration-200 lg:static lg:z-auto lg:shadow-none"
+        class="console-nav fixed inset-y-0 left-0 z-50 flex w-72 shrink-0 flex-col border-r border-border bg-card shadow-pop transition-transform duration-200 lg:sticky lg:top-0 lg:z-auto lg:h-screen lg:shadow-none"
       >
         <div class="flex h-16 items-center justify-between px-5">
           <Logo appName={appName} logoUrl={logoUrl} />

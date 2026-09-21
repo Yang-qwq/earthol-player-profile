@@ -81,6 +81,8 @@ export const en = {
   'dash.fieldLabelPlaceholder': 'Label',
   'dash.fieldValuePlaceholder': 'Value',
   'dash.remove': 'Remove',
+  'dash.field.remove': 'Remove field',
+  'dash.tag.remove': 'Remove tag',
   'dash.noFields': 'No fields yet.',
   'dash.addField': 'Add field',
   'dash.saveFields': 'Save fields',
