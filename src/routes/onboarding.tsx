@@ -26,6 +26,9 @@ function renderOnboarding(
       appName={c.get('appName')}
       faviconUrl={c.get('settings').faviconUrl}
       logoUrl={c.get('settings').logoUrl}
+      customCss={c.get('settings').customCss}
+      customJs={c.get('settings').customJs}
+      customFooter={c.get('settings').customFooter}
       csrfToken={c.get('csrfToken')}
       error={error}
       username={username}

@@ -7,6 +7,111 @@ import type { AdminStats } from '../db/queries';
 import type { SiteSettings } from '../lib/settings';
 import type { Locale, MessageKey, TranslateFn } from '../i18n';
 
+const CUSTOM_CODE_MAX = 32768;
+
+// CodeMirror 6 is not bundled (the project has no JS build step), so the admin
+// page loads it from unpkg — already allowed by the CSP script-src — via an
+// import map in <head> (rendered by Layout) plus a lazy dynamic import in
+// `codeMirrorScript`. The 17 modules below are pinned to the exact versions
+// installed per package.json; bump both together.
+const CODEMIRROR_IMPORT_MAP = JSON.stringify({
+  imports: {
+    '@codemirror/state': 'https://unpkg.com/@codemirror/state@6.7.5/dist/index.js',
+    '@codemirror/view': 'https://unpkg.com/@codemirror/view@6.43.12/dist/index.js',
+    '@codemirror/language': 'https://unpkg.com/@codemirror/language@6.12.4/dist/index.js',
+    '@codemirror/commands': 'https://unpkg.com/@codemirror/commands@6.11.1/dist/index.js',
+    '@codemirror/autocomplete': 'https://unpkg.com/@codemirror/autocomplete@6.20.3/dist/index.js',
+    '@codemirror/lint': 'https://unpkg.com/@codemirror/lint@6.9.7/dist/index.js',
+    '@codemirror/lang-css': 'https://unpkg.com/@codemirror/lang-css@6.3.1/dist/index.js',
+    '@codemirror/lang-javascript': 'https://unpkg.com/@codemirror/lang-javascript@6.2.5/dist/index.js',
+    '@lezer/common': 'https://unpkg.com/@lezer/common@1.5.2/dist/index.js',
+    '@lezer/css': 'https://unpkg.com/@lezer/css@1.3.6/dist/index.js',
+    '@lezer/highlight': 'https://unpkg.com/@lezer/highlight@1.2.3/dist/index.js',
+    '@lezer/javascript': 'https://unpkg.com/@lezer/javascript@1.5.5/dist/index.js',
+    '@lezer/lr': 'https://unpkg.com/@lezer/lr@1.4.10/dist/index.js',
+    '@marijn/find-cluster-break': 'https://unpkg.com/@marijn/find-cluster-break@1.0.4/src/index.js',
+    crelt: 'https://unpkg.com/crelt@1.0.7/index.js',
+    'style-mod': 'https://unpkg.com/style-mod@4.1.4/src/style-mod.js',
+    'w3c-keyname': 'https://unpkg.com/w3c-keyname@2.2.8/index.js',
+  },
+});
+
+/**
+ * Classic-script bootstrap for the two CodeMirror editors in the custom-code
+ * card. The footer HTML textarea stays plain (no language mode needed). It dynamic-imports the pinned modules (bare specifiers resolve through
+ * the Layout import map), then replaces each server-rendered textarea with an
+ * `EditorView` that keeps the original textarea in sync, so the form still
+ * submits the code with or without JavaScript. On any load failure the plain
+ * textareas stay visible as a fallback and a status line explains why.
+ * Locale strings are passed in as a JSON literal, like the other page scripts.
+ */
+function codeMirrorScript(t: TranslateFn): string {
+  const msg = JSON.stringify({ loadError: t('admin.code.loadError'), count: t('admin.code.count') });
+  return `(function(){
+var hosts=document.querySelectorAll('[data-cm-editor]');
+if(!hosts.length)return;
+var MAX=${CUSTOM_CODE_MAX};
+var MSG=${msg};
+function fmtCount(n){return MSG.count.split('{count}').join(n).split('{max}').join(MAX);}
+function setStatus(text){var el=document.querySelector('[data-cm-status]');if(el)el.textContent=text;}
+function mountAll(stateMod,viewMod,langMod,cmdMod,cssMod,jsMod,tagsMod){
+var highlight=langMod.HighlightStyle.define([
+{tag:[tagsMod.tags.comment,tagsMod.tags.lineComment,tagsMod.tags.blockComment],color:'hsl(var(--muted-foreground))'},
+{tag:[tagsMod.tags.keyword,tagsMod.tags.operatorKeyword,tagsMod.tags.controlKeyword,tagsMod.tags.moduleKeyword],color:'hsl(var(--primary))'},
+{tag:[tagsMod.tags.string],color:'hsl(var(--success))'},
+{tag:[tagsMod.tags.number,tagsMod.tags.bool,tagsMod.tags.null,tagsMod.tags.atom,tagsMod.tags.unit],color:'hsl(var(--warning))'},
+{tag:[tagsMod.tags.function(tagsMod.tags.variableName)],color:'hsl(var(--secondary))'},
+{tag:[tagsMod.tags.definition(tagsMod.tags.variableName),tagsMod.tags.definition(tagsMod.tags.propertyName)],color:'hsl(var(--foreground))'},
+{tag:[tagsMod.tags.variableName,tagsMod.tags.propertyName],color:'hsl(var(--foreground))'},
+{tag:[tagsMod.tags.tagName],color:'hsl(var(--primary))'},
+{tag:[tagsMod.tags.className,tagsMod.tags.special(tagsMod.tags.string)],color:'hsl(var(--success))'},
+{tag:[tagsMod.tags.attributeName],color:'hsl(var(--secondary))'},
+{tag:[tagsMod.tags.operator,tagsMod.tags.punctuation,tagsMod.tags.bracket],color:'hsl(var(--muted-foreground))'},
+{tag:[tagsMod.tags.invalid],color:'hsl(var(--danger))'}
+]);
+var spans=document.querySelectorAll('[data-cm-count]');
+function build(host,span){
+var ta=host.querySelector('textarea');
+if(!ta||host.hasAttribute('data-cm-ready'))return;
+host.setAttribute('data-cm-ready','');
+var kind=host.getAttribute('data-cm-editor');
+var langExt=kind==='css'?cssMod.css():jsMod.javascript();
+var wrap=document.createElement('div');
+host.insertBefore(wrap,ta);
+ta.setAttribute('data-cm-hidden','');
+ta.setAttribute('tabindex','-1');
+var state=stateMod.EditorState.create({
+doc:ta.value,
+extensions:[
+langExt,
+langMod.syntaxHighlighting(highlight,{fallback:true}),
+viewMod.EditorView.lineWrapping,
+viewMod.lineNumbers(),
+cmdMod.history(),
+        viewMod.keymap.of(cmdMod.defaultKeymap),
+        viewMod.keymap.of(cmdMod.historyKeymap),
+        viewMod.keymap.of([cmdMod.indentWithTab]),
+viewMod.EditorView.updateListener.of(function(u){
+if(u.docChanged){ta.value=u.state.doc.toString();if(span)span.textContent=fmtCount(ta.value.length);}
+})
+]
+});
+new viewMod.EditorView({parent:wrap,state:state});
+}
+for(var i=0;i<hosts.length;i++)build(hosts[i],spans[i]);
+}
+Promise.all([
+import('@codemirror/state'),
+import('@codemirror/view'),
+import('@codemirror/language'),
+import('@codemirror/commands'),
+import('@codemirror/lang-css'),
+import('@codemirror/lang-javascript'),
+import('@lezer/highlight')
+]).then(function(m){mountAll(m[0],m[1],m[2],m[3],m[4],m[5],m[6]);}).catch(function(){setStatus(MSG.loadError);});
+})();`;
+}
+
 export interface AdminViewProps {
   appName: string;
   csrfToken: string;
@@ -72,6 +177,10 @@ export function AdminView({
       locale={locale}
       pathname={pathname}
       isAdmin
+      customCss={settings.customCss}
+      customJs={settings.customJs}
+      customFooter={settings.customFooter}
+      importMap={CODEMIRROR_IMPORT_MAP}
     >
       <section class="space-y-6">
         <div>
@@ -203,6 +312,66 @@ export function AdminView({
             </button>
           </div>
         </form>
+
+        <form method="post" action="/admin/custom-code" class="card p-6">
+          <input type="hidden" name="_csrf" value={csrfToken} />
+          <div class="mb-5">
+            <h2 class="text-lg font-bold tracking-tight">{t('admin.code.heading')}</h2>
+            <p class="mt-0.5 text-sm text-muted-foreground">{t('admin.code.subtitle')}</p>
+          </div>
+
+          <div class="mb-4">
+            <div class="mb-1.5 flex items-center justify-between gap-3">
+              <label class="label mb-0" for="custom_css">
+                {t('admin.code.css')}
+              </label>
+              <span data-cm-count class="text-xs tabular-nums text-muted-foreground">
+                {t('admin.code.count', { count: settings.customCss.length, max: CUSTOM_CODE_MAX })}
+              </span>
+            </div>
+            <div data-cm-editor="css">
+              <textarea id="custom_css" name="custom_css" rows={12} spellCheck={false} class="code-source">
+                {settings.customCss}
+              </textarea>
+            </div>
+            <p class="mt-1.5 text-xs text-muted-foreground">{t('admin.code.cssHint')}</p>
+          </div>
+
+          <div class="mb-4">
+            <div class="mb-1.5 flex items-center justify-between gap-3">
+              <label class="label mb-0" for="custom_js">
+                {t('admin.code.js')}
+              </label>
+              <span data-cm-count class="text-xs tabular-nums text-muted-foreground">
+                {t('admin.code.count', { count: settings.customJs.length, max: CUSTOM_CODE_MAX })}
+              </span>
+            </div>
+            <div data-cm-editor="js">
+              <textarea id="custom_js" name="custom_js" rows={12} spellCheck={false} class="code-source">
+                {settings.customJs}
+              </textarea>
+            </div>
+            <p class="mt-1.5 text-xs text-muted-foreground">{t('admin.code.jsHint')}</p>
+          </div>
+
+          <div class="mb-4">
+            <label class="label" for="custom_footer">
+              {t('admin.code.footer')}
+            </label>
+            <textarea id="custom_footer" name="custom_footer" rows={8} spellCheck={false} class="code-source">
+              {settings.customFooter}
+            </textarea>
+            <p class="mt-1.5 text-xs text-muted-foreground">{t('admin.code.footerHint')}</p>
+          </div>
+
+          <div class="flex items-center justify-between gap-3">
+            <p data-cm-status class="min-h-4 text-xs text-muted-foreground" />
+            <button type="submit" class="btn-primary">
+              {t('admin.code.save')}
+            </button>
+          </div>
+        </form>
+        <script nonce={nonce} dangerouslySetInnerHTML={{ __html: codeMirrorScript(t) }} />
 
         <div class="card p-6">
           <div class="mb-5">

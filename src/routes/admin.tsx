@@ -43,6 +43,7 @@ adminRoutes.use('/admin/*', requireAdmin);
 const SAVED_MESSAGES: Record<string, MessageKey> = {
   settings: 'admin.saved.settings',
   reserved: 'admin.saved.reserved',
+  code: 'admin.saved.code',
   tags: 'admin.saved.tags',
   user: 'admin.saved.user',
   deleted: 'admin.saved.deleted',
@@ -140,6 +141,10 @@ adminRoutes.post('/admin/settings', async (c) => {
     magicLinkEnabled: is(body.magic_link_enabled),
     defaultTheme: isTheme(theme) ? theme : current.defaultTheme,
     defaultVisibility: isVisibility(visibility) ? visibility : current.defaultVisibility,
+    // This form has no code fields; keep the existing blocks intact.
+    customCss: current.customCss,
+    customJs: current.customJs,
+    customFooter: current.customFooter,
   });
 
   // Cached profile HTML embeds the favicon <link> and the nav logo, so a
@@ -149,6 +154,33 @@ adminRoutes.post('/admin/settings', async (c) => {
   }
 
   return c.redirect('/admin?saved=settings');
+});
+
+const MAX_CUSTOM_CODE = 32768;
+
+// Saves admin-authored site-wide CSS/JS/footer. Kept out of /admin/settings
+// because that form saves the whole settings object and would clobber these
+// fields. Cached profile HTML embeds the rendered blocks, so any change purges
+// the profile cache.
+adminRoutes.post('/admin/custom-code', async (c) => {
+  const current = c.get('settings');
+  const body = await c.req.parseBody();
+
+  const customCss = str(body.custom_css).slice(0, MAX_CUSTOM_CODE);
+  const customJs = str(body.custom_js).slice(0, MAX_CUSTOM_CODE);
+  const customFooter = str(body.custom_footer).slice(0, MAX_CUSTOM_CODE);
+
+  await saveSettings(c.env, { ...current, customCss, customJs, customFooter });
+
+  if (
+    customCss !== current.customCss ||
+    customJs !== current.customJs ||
+    customFooter !== current.customFooter
+  ) {
+    await invalidateAllProfiles(c.env.KV);
+  }
+
+  return c.redirect('/admin?saved=code');
 });
 
 adminRoutes.post('/admin/reserved/add', async (c) => {

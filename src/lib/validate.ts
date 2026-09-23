@@ -62,3 +62,17 @@ export function text(value: unknown, maxLength: number): string {
   const str = typeof value === 'string' ? value.trim() : '';
   return str.slice(0, maxLength);
 }
+
+/**
+ * Prepares admin-authored CSS/JS for a raw inline `<style>`/`<script>` block
+ * rendered via `dangerouslySetInnerHTML`. HTML-escaping the whole content
+ * would corrupt it, because raw-text elements do not decode entities (a CSS
+ * `>` child combinator would break). The only real hazard is an embedded
+ * closing tag, so just that is neutralized: `</style` / `</script` become
+ * `<\/style` / `<\/script`. The backslash is value-preserving in JS strings
+ * and regexes, in CSS strings/urls, and as a CSS identifier escape.
+ */
+export function rawInlineBlock(content: string, tag: 'style' | 'script'): string {
+  const re = new RegExp('</' + tag, 'gi');
+  return content.replace(re, '<\\/' + tag);
+}

@@ -1,13 +1,14 @@
 {
   "name": "earthol-player-profile",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "npm run build:css && wrangler dev",
-    "build": "npm run build:css",
-    "deploy": "npm run build:css && wrangler deploy --env production",
+    "dev": "npm run build && wrangler dev",
+    "build": "npm run build:css && npm run build:vendor",
+    "deploy": "npm run build && wrangler deploy --env production",
     "build:css": "tailwindcss -i ./src/styles/app.css -o ./public/styles.css --minify",
+    "build:vendor": "node -e \"require('fs').copyFileSync('node_modules/htmx.org/dist/htmx.min.js','public/htmx.min.js')\"",
     "watch:css": "tailwindcss -i ./src/styles/app.css -o ./public/styles.css --watch",
     "typecheck": "tsc --noEmit",
     "cf-typegen": "wrangler types",
@@ -15,12 +16,18 @@
     "db:init:remote": "wrangler d1 execute earthol-player-profile-d1 --remote --file=./schema.sql"
   },
   "dependencies": {
+    "@codemirror/autocomplete": "^6.20.3",
+    "@codemirror/commands": "^6.11.1",
+    "@codemirror/lang-css": "^6.3.1",
+    "@codemirror/lang-javascript": "^6.2.5",
+    "@codemirror/lint": "^6.9.7",
     "hono": "^4.6.14",
     "mfm-js": "^0.26.0"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260908.1",
     "@tailwindcss/cli": "^4.0.0",
+    "htmx.org": "2.0.4",
     "tailwindcss": "^4.0.0",
     "typescript": "^5.7.3",
     "wrangler": "^4.0.0"

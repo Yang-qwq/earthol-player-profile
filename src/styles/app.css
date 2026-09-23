@@ -238,6 +238,98 @@
   color: hsl(var(--foreground));
 }
 
+/* Fallback code textarea (visible until/without JS, always kept for the form
+   submit) on the admin custom-code card. */
+.code-source {
+  width: 100%;
+  min-height: 18.5rem;
+  resize: vertical;
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.75rem;
+  background-color: hsl(var(--muted) / 0.4);
+  padding: 0.75rem 1rem;
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  color: hsl(var(--foreground));
+  outline: none;
+  transition:
+    border-color 150ms,
+    box-shadow 150ms,
+    background-color 150ms;
+}
+.code-source:focus {
+  border-color: hsl(var(--primary));
+  background-color: hsl(var(--card));
+  box-shadow: 0 0 0 2px hsl(var(--ring) / 0.3);
+}
+
+/* Once codeMirrorScript mounts a CodeMirror view, the textarea is pushed
+   offscreen (kept in the DOM so the form still submits its value). */
+[data-cm-hidden] {
+  position: absolute;
+  left: -9999px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* CodeMirror 6 chrome. The `[data-cm-editor]` scope makes these rules strictly
+   more specific than the base styles @codemirror/view injects at runtime (at
+   equal specificity CM would win, since it injects after this stylesheet) —
+   except `.cm-selectionBackground`, which CM sets inline and thus needs
+   `!important`. */
+[data-cm-editor] .cm-editor {
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.75rem;
+  background-color: hsl(var(--muted) / 0.4);
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  color: hsl(var(--foreground));
+  transition:
+    border-color 150ms,
+    box-shadow 150ms,
+    background-color 150ms;
+}
+[data-cm-editor] .cm-editor.cm-focused {
+  border-color: hsl(var(--primary));
+  background-color: hsl(var(--card));
+  box-shadow: 0 0 0 2px hsl(var(--ring) / 0.3);
+}
+[data-cm-editor] .cm-editor .cm-scroller {
+  max-height: 24rem;
+  font-family: var(--font-mono);
+  line-height: 1.6;
+}
+[data-cm-editor] .cm-editor .cm-content {
+  min-height: 18.5rem;
+  padding: 0.75rem 0;
+  caret-color: hsl(var(--foreground));
+  tab-size: 2;
+}
+[data-cm-editor] .cm-editor .cm-line {
+  padding: 0 1rem;
+}
+[data-cm-editor] .cm-editor .cm-gutters {
+  background-color: hsl(var(--muted) / 0.6);
+  border-right: 1px solid hsl(var(--border));
+  color: hsl(var(--muted-foreground) / 0.7);
+  user-select: none;
+}
+[data-cm-editor] .cm-editor .cm-gutterElement {
+  padding: 0 0.5rem 0 0.75rem;
+}
+[data-cm-editor] .cm-editor .cm-cursor {
+  border-left: 2px solid hsl(var(--foreground));
+}
+[data-cm-editor] .cm-editor .cm-selectionBackground,
+[data-cm-editor] .cm-editor.cm-focused .cm-selectionBackground {
+  background-color: hsl(var(--ring) / 0.25) !important;
+}
+
 /* Profile share QR frame (filled by SHARE_SCRIPT in src/views/profile.tsx) */
 .share-qr-box {
   display: grid;

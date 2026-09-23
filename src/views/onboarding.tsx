@@ -6,6 +6,9 @@ export interface OnboardingProps {
   appName: string;
   faviconUrl: string;
   logoUrl: string;
+  customCss?: string;
+  customJs?: string;
+  customFooter?: string;
   csrfToken: string;
   error?: string;
   username?: string;
@@ -20,6 +23,9 @@ export function Onboarding({
   appName,
   faviconUrl,
   logoUrl,
+  customCss,
+  customJs,
+  customFooter,
   csrfToken,
   error,
   username = '',
@@ -34,6 +40,9 @@ export function Onboarding({
       appName={appName}
       faviconUrl={faviconUrl}
       logoUrl={logoUrl}
+      customCss={customCss}
+      customJs={customJs}
+      customFooter={customFooter}
       title={t('onboard.title')}
       nonce={nonce}
       t={t}

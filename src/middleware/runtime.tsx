@@ -33,6 +33,9 @@ export const loadRuntime: MiddlewareHandler<AppContext> = async (c, next) => {
           appName={appName}
           faviconUrl={settings.faviconUrl}
           logoUrl={settings.logoUrl}
+          customCss={settings.customCss}
+          customJs={settings.customJs}
+          customFooter={settings.customFooter}
           nonce={c.get('secureHeadersNonce')}
           t={t}
           locale={c.get('locale')}

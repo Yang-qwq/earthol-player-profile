@@ -6,6 +6,9 @@ export interface LoginProps {
   appName: string;
   faviconUrl: string;
   logoUrl: string;
+  customCss?: string;
+  customJs?: string;
+  customFooter?: string;
   csrfToken: string;
   githubEnabled: boolean;
   magicEnabled?: boolean;
@@ -22,6 +25,9 @@ export function Login({
   appName,
   faviconUrl,
   logoUrl,
+  customCss,
+  customJs,
+  customFooter,
   csrfToken,
   githubEnabled,
   magicEnabled = true,
@@ -38,6 +44,9 @@ export function Login({
       appName={appName}
       faviconUrl={faviconUrl}
       logoUrl={logoUrl}
+      customCss={customCss}
+      customJs={customJs}
+      customFooter={customFooter}
       title={t('login.title')}
       nonce={nonce}
       t={t}

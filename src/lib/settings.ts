@@ -17,6 +17,9 @@ export interface SiteSettings {
   magicLinkEnabled: boolean;
   defaultTheme: string;
   defaultVisibility: string;
+  customCss: string;
+  customJs: string;
+  customFooter: string;
 }
 
 const CACHE_KEY = 'settings:all';
@@ -32,6 +35,9 @@ const KEY = {
   magic: 'magic_link_enabled',
   defaultTheme: 'default_theme',
   defaultVisibility: 'default_visibility',
+  customCss: 'custom_css',
+  customJs: 'custom_js',
+  customFooter: 'custom_footer',
 };
 
 const DEFAULTS: SiteSettings = {
@@ -44,6 +50,9 @@ const DEFAULTS: SiteSettings = {
   magicLinkEnabled: true,
   defaultTheme: 'default',
   defaultVisibility: 'public',
+  customCss: '',
+  customJs: '',
+  customFooter: '',
 };
 
 function toBool(value: string | undefined, fallback: boolean): boolean {
@@ -80,6 +89,9 @@ export async function getSettings(env: Env): Promise<SiteSettings> {
     magicLinkEnabled: toBool(map[KEY.magic], DEFAULTS.magicLinkEnabled),
     defaultTheme: map[KEY.defaultTheme] ?? DEFAULTS.defaultTheme,
     defaultVisibility: map[KEY.defaultVisibility] ?? DEFAULTS.defaultVisibility,
+    customCss: map[KEY.customCss] ?? DEFAULTS.customCss,
+    customJs: map[KEY.customJs] ?? DEFAULTS.customJs,
+    customFooter: map[KEY.customFooter] ?? DEFAULTS.customFooter,
   };
 
   try {
@@ -103,6 +115,9 @@ export async function saveSettings(env: Env, settings: SiteSettings): Promise<vo
     [KEY.magic]: settings.magicLinkEnabled ? '1' : '0',
     [KEY.defaultTheme]: settings.defaultTheme,
     [KEY.defaultVisibility]: settings.defaultVisibility,
+    [KEY.customCss]: settings.customCss,
+    [KEY.customJs]: settings.customJs,
+    [KEY.customFooter]: settings.customFooter,
   });
   try {
     await env.KV.delete(CACHE_KEY);

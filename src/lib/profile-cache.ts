@@ -7,6 +7,20 @@ import { LOCALES, type Locale } from '../i18n';
 
 const TTL_SECONDS = 300;
 
+/**
+ * Cacheable HTML must not embed the per-request CSP nonce: a cached copy would
+ * be served under a *different* request's nonce and every inline script on it
+ * would be blocked. Cache the page with this placeholder instead and swap in
+ * the live nonce when serving (`withNonce`). It is intentionally not a valid
+ * nonce so a leaked placeholder can never be a working one.
+ */
+export const NONCE_PLACEHOLDER = 'CSP_NONCE_PLACEHOLDER';
+
+/** Replace the cached nonce placeholder with the current request's nonce. */
+export function withNonce(html: string, nonce: string): string {
+  return nonce ? html.split(NONCE_PLACEHOLDER).join(nonce) : html;
+}
+
 function keyFor(locale: Locale, username: string): string {
   return `profile:html:${locale}:${username.toLowerCase()}`;
 }

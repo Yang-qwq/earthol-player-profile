@@ -9,7 +9,7 @@ import { Layout } from '../views/layout';
 import { Home } from '../views/home';
 import { Profile } from '../views/profile';
 import { getUserByUsername, listFields, listUserTags } from '../db/queries';
-import { getCachedProfile, setCachedProfile } from '../lib/profile-cache';
+import { NONCE_PLACEHOLDER, getCachedProfile, setCachedProfile, withNonce } from '../lib/profile-cache';
 import { navUser } from '../lib/view';
 import { appUrl } from '../lib/env';
 
@@ -22,6 +22,9 @@ publicRoutes.get('/', (c) => {
       appName={c.get('appName')}
       faviconUrl={c.get('settings').faviconUrl}
       logoUrl={c.get('settings').logoUrl}
+      customCss={c.get('settings').customCss}
+      customJs={c.get('settings').customJs}
+      customFooter={c.get('settings').customFooter}
       csrfToken={c.get('csrfToken')}
       currentUser={navUser(c.get('user'))}
       nonce={c.get('secureHeadersNonce')}
@@ -49,11 +52,12 @@ publicRoutes.get('/:username', async (c) => {
   const canonical = `${appUrl(c.env)}/${user.username}`;
   const cacheable = !viewer && user.visibility === 'public';
   const robots = user.visibility === 'public' ? undefined : 'noindex, nofollow';
+  const nonce = c.get('secureHeadersNonce') ?? '';
 
   if (cacheable) {
     const cached = await getCachedProfile(c.env.KV, locale, username);
     if (cached) {
-      return c.body(cached, 200, {
+      return c.body(withNonce(cached, nonce), 200, {
         'Content-Type': 'text/html; charset=UTF-8',
         'Cache-Control': 'public, max-age=60',
       });
@@ -81,6 +85,9 @@ publicRoutes.get('/:username', async (c) => {
       appName={c.get('appName')}
       faviconUrl={c.get('settings').faviconUrl}
       logoUrl={c.get('settings').logoUrl}
+      customCss={c.get('settings').customCss}
+      customJs={c.get('settings').customJs}
+      customFooter={c.get('settings').customFooter}
       user={user}
       fields={fields}
       tags={visibleTags}
@@ -89,7 +96,7 @@ publicRoutes.get('/:username', async (c) => {
       isOwner={isOwner}
       canonical={canonical}
       robots={robots}
-      nonce={c.get('secureHeadersNonce')}
+      nonce={cacheable ? NONCE_PLACEHOLDER : nonce}
       t={t}
       locale={locale}
       pathname={`/${user.username}`}
@@ -100,7 +107,7 @@ publicRoutes.get('/:username', async (c) => {
 
   if (cacheable) {
     await setCachedProfile(c.env.KV, locale, username, html);
-    return c.body(html, 200, {
+    return c.body(withNonce(html, nonce), 200, {
       'Content-Type': 'text/html; charset=UTF-8',
       'Cache-Control': 'public, max-age=60',
     });

@@ -9,6 +9,9 @@ export interface DashboardProps {
   appName: string;
   faviconUrl: string;
   logoUrl: string;
+  customCss?: string;
+  customJs?: string;
+  customFooter?: string;
   csrfToken: string;
   user: UserRow;
   gravatarUrl: string;
@@ -31,6 +34,9 @@ export function Dashboard({
   appName,
   faviconUrl,
   logoUrl,
+  customCss,
+  customJs,
+  customFooter,
   csrfToken,
   user,
   gravatarUrl,
@@ -56,6 +62,9 @@ export function Dashboard({
       appName={appName}
       faviconUrl={faviconUrl}
       logoUrl={logoUrl}
+      customCss={customCss}
+      customJs={customJs}
+      customFooter={customFooter}
       title={t('dash.title')}
       shell="console"
       csrfToken={csrfToken}

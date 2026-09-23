@@ -15,6 +15,9 @@ export interface ProfileProps {
   appName: string;
   faviconUrl: string;
   logoUrl: string;
+  customCss?: string;
+  customJs?: string;
+  customFooter?: string;
   user: UserRow;
   fields: FieldRow[];
   tags: UserTagRow[];
@@ -50,6 +53,9 @@ export function Profile({
   appName,
   faviconUrl,
   logoUrl,
+  customCss,
+  customJs,
+  customFooter,
   user,
   fields,
   tags,
@@ -76,6 +82,9 @@ export function Profile({
       appName={appName}
       faviconUrl={faviconUrl}
       logoUrl={logoUrl}
+      customCss={customCss}
+      customJs={customJs}
+      customFooter={customFooter}
       title={name}
       description={description}
       csrfToken={csrfToken}

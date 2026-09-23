@@ -5,7 +5,7 @@
  */
 import type { PropsWithChildren } from 'hono/jsx';
 import { htmlLang, LOCALES, type Locale, type TranslateFn } from '../i18n';
-import { isSafeFaviconUrl } from '../lib/validate';
+import { isSafeFaviconUrl, rawInlineBlock } from '../lib/validate';
 
 export interface LayoutProps {
   title?: string;
@@ -24,6 +24,14 @@ export interface LayoutProps {
   locale: Locale;
   pathname: string;
   isAdmin?: boolean;
+  /** Admin-authored CSS, injected on every page (see the admin custom-code card). */
+  customCss?: string;
+  /** Admin-authored JS, injected on every page (see the admin custom-code card). */
+  customJs?: string;
+  /** Admin-authored raw HTML footer; replaces the default footer when set. */
+  customFooter?: string;
+  /** Raw import-map JSON for the admin panel's CodeMirror bootstrap. */
+  importMap?: string;
   og?: {
     title: string;
     description: string;
@@ -178,6 +186,10 @@ export function Layout({
   locale,
   pathname,
   isAdmin,
+  customCss,
+  customJs,
+  customFooter,
+  importMap,
   og,
   children,
 }: PropsWithChildren<LayoutProps>) {
@@ -188,6 +200,9 @@ export function Layout({
       <head>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
+        {importMap ? (
+          <script type="importmap" nonce={nonce} dangerouslySetInnerHTML={{ __html: importMap }} />
+        ) : null}
         <script nonce={nonce} dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
         <script nonce={nonce} dangerouslySetInnerHTML={{ __html: NAV_SCRIPT }} />
         <script nonce={nonce} dangerouslySetInnerHTML={{ __html: REPEATER_SCRIPT }} />
@@ -221,7 +236,10 @@ export function Layout({
           href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&display=block"
         />
         <link rel="stylesheet" href="/styles.css" />
-        <script src="https://unpkg.com/htmx.org@2.0.4" defer />
+        <script src="/htmx.min.js" defer />
+        {customCss ? (
+          <style data-custom-code dangerouslySetInnerHTML={{ __html: rawInlineBlock(customCss, 'style') }} />
+        ) : null}
       </head>
       <body class="h-full">
         {shell === 'console' ? (
@@ -235,6 +253,7 @@ export function Layout({
             locale={locale}
             pathname={pathname}
             isAdmin={isAdmin}
+            customFooter={customFooter}
           >
             {children}
           </ConsoleShell>
@@ -247,10 +266,14 @@ export function Layout({
             t={t}
             locale={locale}
             pathname={pathname}
+            customFooter={customFooter}
           >
             {children}
           </PageShell>
         )}
+        {customJs ? (
+          <script nonce={nonce} data-custom-code dangerouslySetInnerHTML={{ __html: rawInlineBlock(customJs, 'script') }} />
+        ) : null}
       </body>
     </html>
   );
@@ -290,6 +313,7 @@ function PageShell({
   t,
   locale,
   pathname,
+  customFooter,
   children,
 }: PropsWithChildren<{
   appName: string;
@@ -299,6 +323,7 @@ function PageShell({
   t: TranslateFn;
   locale: Locale;
   pathname: string;
+  customFooter?: string;
 }>) {
   return (
     <div class="flex min-h-full flex-col">
@@ -342,18 +367,26 @@ function PageShell({
         <div class="mx-auto w-full max-w-5xl">{children}</div>
       </main>
 
-      <footer class="border-t border-border/60 py-6 text-center text-xs text-muted-foreground">
-        <a
-          class="font-semibold text-foreground/80 transition hover:text-foreground hover:underline"
-          href={GITHUB_REPO_URL}
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          {appName}
-        </a>
-        <span class="mx-1.5 opacity-60">·</span>
-        {t('footer.tagline')}
-      </footer>
+      {customFooter ? (
+        <footer
+          data-custom-footer
+          class="border-t border-border/60 py-6 text-center text-xs text-muted-foreground"
+          dangerouslySetInnerHTML={{ __html: customFooter }}
+        />
+      ) : (
+        <footer class="border-t border-border/60 py-6 text-center text-xs text-muted-foreground">
+          <a
+            class="font-semibold text-foreground/80 transition hover:text-foreground hover:underline"
+            href={GITHUB_REPO_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            {appName}
+          </a>
+          <span class="mx-1.5 opacity-60">·</span>
+          {t('footer.tagline')}
+        </footer>
+      )}
     </div>
   );
 }
@@ -368,6 +401,7 @@ function ConsoleShell({
   locale,
   pathname,
   isAdmin,
+  customFooter,
   children,
 }: PropsWithChildren<{
   appName: string;
@@ -379,6 +413,7 @@ function ConsoleShell({
   locale: Locale;
   pathname: string;
   isAdmin?: boolean;
+  customFooter?: string;
 }>) {
   const username = currentUser?.username ?? '';
   const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
@@ -492,6 +527,14 @@ function ConsoleShell({
         <main class="flex-1 px-4 py-6 lg:px-8 lg:py-8">
           <div class="mx-auto w-full max-w-4xl">{children}</div>
         </main>
+
+        {customFooter ? (
+          <footer
+            data-custom-footer
+            class="border-t border-border/60 px-4 py-6 text-center text-xs text-muted-foreground lg:px-8"
+            dangerouslySetInnerHTML={{ __html: customFooter }}
+          />
+        ) : null}
       </div>
     </div>
   );
