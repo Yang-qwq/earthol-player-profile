@@ -24,6 +24,7 @@ import { requireAuth } from '../middleware/auth';
 import { invalidateProfiles } from '../lib/profile-cache';
 import { gravatarAvatarUrl } from '../lib/gravatar';
 import { githubConfigured } from '../lib/oauth-github';
+import { resolveGithub, resolveGravatarMirror, resolveMailer } from '../lib/config';
 import { isTheme, isVisibility } from '../lib/themes';
 import {
   isSafeUrl,
@@ -142,12 +143,12 @@ dashboardRoutes.get('/dashboard', async (c) => {
       customFooter={c.get('settings').customFooter}
       csrfToken={c.get('csrfToken')}
       user={user}
-      gravatarUrl={await gravatarAvatarUrl(user.email, c.env.GRAVATAR_MIRROR)}
+      gravatarUrl={await gravatarAvatarUrl(user.email, resolveGravatarMirror(c.env, settings))}
       fields={fields}
       tags={tags}
       tagCategories={tagCategories}
       identities={identities}
-      githubEnabled={githubConfigured(c.env) && settings.githubLoginEnabled}
+      githubEnabled={githubConfigured(resolveGithub(c.env, settings)) && settings.githubLoginEnabled}
       magicEnabled={settings.magicLinkEnabled}
       message={message}
       error={errorMessage(c.req.query('error'), t)}
@@ -295,7 +296,7 @@ dashboardRoutes.post('/dashboard/identities/email', async (c) => {
 
   const link = `${appUrl(c.env)}/auth/email/verify?token=${encodeURIComponent(token)}`;
   try {
-    await getMailer(c.env).send({
+    await getMailer(resolveMailer(c.env, c.get('settings'))).send({
       to: email,
       ...magicLinkEmail(c.get('t'), link, c.get('appName')),
     });

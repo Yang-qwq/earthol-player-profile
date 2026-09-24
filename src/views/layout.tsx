@@ -30,8 +30,6 @@ export interface LayoutProps {
   customJs?: string;
   /** Admin-authored raw HTML footer; replaces the default footer when set. */
   customFooter?: string;
-  /** Raw import-map JSON for the admin panel's CodeMirror bootstrap. */
-  importMap?: string;
   og?: {
     title: string;
     description: string;
@@ -189,7 +187,6 @@ export function Layout({
   customCss,
   customJs,
   customFooter,
-  importMap,
   og,
   children,
 }: PropsWithChildren<LayoutProps>) {
@@ -200,9 +197,6 @@ export function Layout({
       <head>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        {importMap ? (
-          <script type="importmap" nonce={nonce} dangerouslySetInnerHTML={{ __html: importMap }} />
-        ) : null}
         <script nonce={nonce} dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
         <script nonce={nonce} dangerouslySetInnerHTML={{ __html: NAV_SCRIPT }} />
         <script nonce={nonce} dangerouslySetInnerHTML={{ __html: REPEATER_SCRIPT }} />
@@ -236,7 +230,7 @@ export function Layout({
           href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&display=block"
         />
         <link rel="stylesheet" href="/styles.css" />
-        <script src="/htmx.min.js" defer />
+        <script src="/vendor/htmx.min.js" defer />
         {customCss ? (
           <style data-custom-code dangerouslySetInnerHTML={{ __html: rawInlineBlock(customCss, 'style') }} />
         ) : null}

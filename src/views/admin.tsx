@@ -5,45 +5,20 @@ import { TAG_COLORS, tagChipClasses } from '../lib/tags';
 import { THEMES, VISIBILITIES } from '../lib/themes';
 import type { AdminStats } from '../db/queries';
 import type { SiteSettings } from '../lib/settings';
+import type { EnvLocks } from '../lib/config';
 import type { Locale, MessageKey, TranslateFn } from '../i18n';
 
 const CUSTOM_CODE_MAX = 32768;
 
-// CodeMirror 6 is not bundled (the project has no JS build step), so the admin
-// page loads it from unpkg — already allowed by the CSP script-src — via an
-// import map in <head> (rendered by Layout) plus a lazy dynamic import in
-// `codeMirrorScript`. The 17 modules below are pinned to the exact versions
-// installed per package.json; bump both together.
-const CODEMIRROR_IMPORT_MAP = JSON.stringify({
-  imports: {
-    '@codemirror/state': 'https://unpkg.com/@codemirror/state@6.7.5/dist/index.js',
-    '@codemirror/view': 'https://unpkg.com/@codemirror/view@6.43.12/dist/index.js',
-    '@codemirror/language': 'https://unpkg.com/@codemirror/language@6.12.4/dist/index.js',
-    '@codemirror/commands': 'https://unpkg.com/@codemirror/commands@6.11.1/dist/index.js',
-    '@codemirror/autocomplete': 'https://unpkg.com/@codemirror/autocomplete@6.20.3/dist/index.js',
-    '@codemirror/lint': 'https://unpkg.com/@codemirror/lint@6.9.7/dist/index.js',
-    '@codemirror/lang-css': 'https://unpkg.com/@codemirror/lang-css@6.3.1/dist/index.js',
-    '@codemirror/lang-javascript': 'https://unpkg.com/@codemirror/lang-javascript@6.2.5/dist/index.js',
-    '@lezer/common': 'https://unpkg.com/@lezer/common@1.5.2/dist/index.js',
-    '@lezer/css': 'https://unpkg.com/@lezer/css@1.3.6/dist/index.js',
-    '@lezer/highlight': 'https://unpkg.com/@lezer/highlight@1.2.3/dist/index.js',
-    '@lezer/javascript': 'https://unpkg.com/@lezer/javascript@1.5.5/dist/index.js',
-    '@lezer/lr': 'https://unpkg.com/@lezer/lr@1.4.10/dist/index.js',
-    '@marijn/find-cluster-break': 'https://unpkg.com/@marijn/find-cluster-break@1.0.4/src/index.js',
-    crelt: 'https://unpkg.com/crelt@1.0.7/index.js',
-    'style-mod': 'https://unpkg.com/style-mod@4.1.4/src/style-mod.js',
-    'w3c-keyname': 'https://unpkg.com/w3c-keyname@2.2.8/index.js',
-  },
-});
-
 /**
- * Classic-script bootstrap for the two CodeMirror editors in the custom-code
- * card. The footer HTML textarea stays plain (no language mode needed). It dynamic-imports the pinned modules (bare specifiers resolve through
- * the Layout import map), then replaces each server-rendered textarea with an
- * `EditorView` that keeps the original textarea in sync, so the form still
- * submits the code with or without JavaScript. On any load failure the plain
- * textareas stay visible as a fallback and a status line explains why.
- * Locale strings are passed in as a JSON literal, like the other page scripts.
+ * Classic-script bootstrap for the three CodeMirror editors in the custom-code
+ * card (CSS, JS, and the HTML footer). It dynamic-imports the locally-bundled
+ * `public/vendor/codemirror.js` (built by `scripts/build-vendor.mjs`), then
+ * replaces each server-rendered textarea with an `EditorView` that keeps the
+ * original textarea in sync, so the form still submits the code with or without
+ * JavaScript. On any load failure the plain textareas stay visible as a
+ * fallback and a status line explains why. Locale strings are passed in as a
+ * JSON literal, like the other page scripts.
  */
 function codeMirrorScript(t: TranslateFn): string {
   const msg = JSON.stringify({ loadError: t('admin.code.loadError'), count: t('admin.code.count') });
@@ -54,7 +29,7 @@ var MAX=${CUSTOM_CODE_MAX};
 var MSG=${msg};
 function fmtCount(n){return MSG.count.split('{count}').join(n).split('{max}').join(MAX);}
 function setStatus(text){var el=document.querySelector('[data-cm-status]');if(el)el.textContent=text;}
-function mountAll(stateMod,viewMod,langMod,cmdMod,cssMod,jsMod,tagsMod){
+function mountAll(stateMod,viewMod,langMod,cmdMod,cssMod,jsMod,htmlMod,tagsMod){
 var highlight=langMod.HighlightStyle.define([
 {tag:[tagsMod.tags.comment,tagsMod.tags.lineComment,tagsMod.tags.blockComment],color:'hsl(var(--muted-foreground))'},
 {tag:[tagsMod.tags.keyword,tagsMod.tags.operatorKeyword,tagsMod.tags.controlKeyword,tagsMod.tags.moduleKeyword],color:'hsl(var(--primary))'},
@@ -75,7 +50,7 @@ var ta=host.querySelector('textarea');
 if(!ta||host.hasAttribute('data-cm-ready'))return;
 host.setAttribute('data-cm-ready','');
 var kind=host.getAttribute('data-cm-editor');
-var langExt=kind==='css'?cssMod.css():jsMod.javascript();
+var langExt=kind==='css'?cssMod.css():kind==='html'?htmlMod.html():jsMod.javascript();
 var wrap=document.createElement('div');
 host.insertBefore(wrap,ta);
 ta.setAttribute('data-cm-hidden','');
@@ -100,15 +75,7 @@ new viewMod.EditorView({parent:wrap,state:state});
 }
 for(var i=0;i<hosts.length;i++)build(hosts[i],spans[i]);
 }
-Promise.all([
-import('@codemirror/state'),
-import('@codemirror/view'),
-import('@codemirror/language'),
-import('@codemirror/commands'),
-import('@codemirror/lang-css'),
-import('@codemirror/lang-javascript'),
-import('@lezer/highlight')
-]).then(function(m){mountAll(m[0],m[1],m[2],m[3],m[4],m[5],m[6]);}).catch(function(){setStatus(MSG.loadError);});
+import('/vendor/codemirror.js').then(function(m){mountAll(m.state,m.view,m.language,m.commands,m.langCss,m.langJs,m.langHtml,m.highlight);}).catch(function(){setStatus(MSG.loadError);});
 })();`;
 }
 
@@ -122,6 +89,20 @@ export interface AdminViewProps {
   selfId: string;
   envAdminEmails: string[];
   settings: SiteSettings;
+  integrations: {
+    githubClientId: string;
+    githubClientSecretSet: boolean;
+    mailerDriver: string;
+    smtpHost: string;
+    smtpPort: string;
+    smtpSecure: string;
+    smtpUser: string;
+    smtpPasswordSet: boolean;
+    smtpFrom: string;
+    gravatarMirror: string;
+  };
+  envLocks: EnvLocks;
+  githubCallbackUrl: string;
   stats: AdminStats;
   reserved: string[];
   tagCategories: TagCategoryRow[];
@@ -146,6 +127,9 @@ export function AdminView({
   selfId,
   envAdminEmails,
   settings,
+  integrations,
+  envLocks,
+  githubCallbackUrl,
   stats,
   reserved,
   tagCategories,
@@ -180,7 +164,6 @@ export function AdminView({
       customCss={settings.customCss}
       customJs={settings.customJs}
       customFooter={settings.customFooter}
-      importMap={CODEMIRROR_IMPORT_MAP}
     >
       <section class="space-y-6">
         <div>
@@ -218,19 +201,16 @@ export function AdminView({
           </div>
 
           <div class="grid gap-4 sm:grid-cols-2">
-            <div>
-              <label class="label" for="site_name">
-                {t('admin.settings.siteName')}
-              </label>
-              <input
-                id="site_name"
-                name="site_name"
-                value={settings.siteName}
-                maxlength={60}
-                class="field"
-              />
-              <p class="mt-1 px-1 text-xs text-muted-foreground">{t('admin.settings.siteNameHint')}</p>
-            </div>
+            <ConfigField
+              id="site_name"
+              name="site_name"
+              label={t('admin.settings.siteName')}
+              value={envLocks.siteName ? appName : settings.siteName}
+              maxLength={60}
+              hint={t('admin.settings.siteNameHint')}
+              locked={envLocks.siteName}
+              t={t}
+            />
             <div>
               <label class="label" for="favicon_url">
                 {t('admin.settings.favicon')}
@@ -313,6 +293,140 @@ export function AdminView({
           </div>
         </form>
 
+        <form method="post" action="/admin/config" class="card p-6">
+          <input type="hidden" name="_csrf" value={csrfToken} />
+          <div class="mb-5">
+            <h2 class="text-lg font-bold tracking-tight">{t('admin.integrations.heading')}</h2>
+            <p class="mt-0.5 text-sm text-muted-foreground">{t('admin.integrations.subtitle')}</p>
+          </div>
+
+          <h3 class="mb-3 text-sm font-semibold">{t('admin.integrations.githubHeading')}</h3>
+          <div class="grid gap-4 sm:grid-cols-2">
+            <ConfigField
+              id="github_client_id"
+              name="github_client_id"
+              label={t('admin.integrations.clientId')}
+              value={integrations.githubClientId}
+              locked={envLocks.githubClientId}
+              t={t}
+            />
+            <ConfigField
+              id="github_client_secret"
+              name="github_client_secret"
+              type="password"
+              label={t('admin.integrations.clientSecret')}
+              placeholder={
+                integrations.githubClientSecretSet ? t('admin.integrations.secretSet') : undefined
+              }
+              locked={envLocks.githubClientSecret}
+              warnInsecure
+              insecureEnv="GITHUB_CLIENT_SECRET"
+              t={t}
+            />
+          </div>
+          <p class="mt-2 px-1 text-xs text-muted-foreground">
+            {t('admin.integrations.githubHint')}{' '}
+            <code class="rounded bg-muted px-1.5 py-0.5 font-mono text-[11px]">
+              {githubCallbackUrl}
+            </code>
+          </p>
+
+          <h3 class="mb-3 mt-6 text-sm font-semibold">{t('admin.integrations.emailHeading')}</h3>
+          <div class="grid gap-4 sm:grid-cols-2">
+            <ConfigSelect
+              id="mailer_driver"
+              name="mailer_driver"
+              label={t('admin.integrations.driver')}
+              value={integrations.mailerDriver}
+              options={[
+                { value: '', label: t('admin.integrations.driverConsole') },
+                { value: 'smtp', label: t('admin.integrations.driverSmtp') },
+              ]}
+              locked={envLocks.mailerDriver}
+              t={t}
+            />
+            <ConfigField
+              id="smtp_host"
+              name="smtp_host"
+              label={t('admin.integrations.smtpHost')}
+              value={integrations.smtpHost}
+              locked={envLocks.smtpHost}
+              t={t}
+            />
+            <ConfigField
+              id="smtp_port"
+              name="smtp_port"
+              label={t('admin.integrations.smtpPort')}
+              value={integrations.smtpPort}
+              placeholder="465"
+              locked={envLocks.smtpPort}
+              t={t}
+            />
+            <ConfigSelect
+              id="smtp_secure"
+              name="smtp_secure"
+              label={t('admin.integrations.smtpSecure')}
+              value={integrations.smtpSecure}
+              options={[
+                { value: '', label: t('admin.integrations.smtpSecureAuto') },
+                { value: 'tls', label: t('admin.integrations.smtpSecureTls') },
+                { value: 'starttls', label: t('admin.integrations.smtpSecureStarttls') },
+                { value: 'none', label: t('admin.integrations.smtpSecureNone') },
+              ]}
+              locked={envLocks.smtpSecure}
+              t={t}
+            />
+            <ConfigField
+              id="smtp_user"
+              name="smtp_user"
+              label={t('admin.integrations.smtpUser')}
+              value={integrations.smtpUser}
+              locked={envLocks.smtpUser}
+              t={t}
+            />
+            <ConfigField
+              id="smtp_password"
+              name="smtp_password"
+              type="password"
+              label={t('admin.integrations.smtpPassword')}
+              placeholder={
+                integrations.smtpPasswordSet ? t('admin.integrations.secretSet') : undefined
+              }
+              locked={envLocks.smtpPassword}
+              warnInsecure
+              insecureEnv="SMTP_PASSWORD"
+              t={t}
+            />
+            <ConfigField
+              id="smtp_from"
+              name="smtp_from"
+              label={t('admin.integrations.smtpFrom')}
+              value={integrations.smtpFrom}
+              placeholder="EarthOL <no-reply@example.com>"
+              locked={envLocks.smtpFrom}
+              t={t}
+            />
+          </div>
+
+          <h3 class="mb-3 mt-6 text-sm font-semibold">{t('admin.integrations.gravatarHeading')}</h3>
+          <ConfigField
+            id="gravatar_mirror"
+            name="gravatar_mirror"
+            label={t('admin.integrations.gravatarMirror')}
+            value={integrations.gravatarMirror}
+            placeholder="https://www.gravatar.com/avatar"
+            hint={t('admin.integrations.gravatarHint')}
+            locked={envLocks.gravatarMirror}
+            t={t}
+          />
+
+          <div class="mt-6 flex justify-end">
+            <button type="submit" class="btn-primary">
+              {t('admin.integrations.save')}
+            </button>
+          </div>
+        </form>
+
         <form method="post" action="/admin/custom-code" class="card p-6">
           <input type="hidden" name="_csrf" value={csrfToken} />
           <div class="mb-5">
@@ -355,12 +469,19 @@ export function AdminView({
           </div>
 
           <div class="mb-4">
-            <label class="label" for="custom_footer">
-              {t('admin.code.footer')}
-            </label>
-            <textarea id="custom_footer" name="custom_footer" rows={8} spellCheck={false} class="code-source">
-              {settings.customFooter}
-            </textarea>
+            <div class="mb-1.5 flex items-center justify-between gap-3">
+              <label class="label mb-0" for="custom_footer">
+                {t('admin.code.footer')}
+              </label>
+              <span data-cm-count class="text-xs tabular-nums text-muted-foreground">
+                {t('admin.code.count', { count: settings.customFooter.length, max: CUSTOM_CODE_MAX })}
+              </span>
+            </div>
+            <div data-cm-editor="html">
+              <textarea id="custom_footer" name="custom_footer" rows={8} spellCheck={false} class="code-source">
+                {settings.customFooter}
+              </textarea>
+            </div>
             <p class="mt-1.5 text-xs text-muted-foreground">{t('admin.code.footerHint')}</p>
           </div>
 
@@ -671,4 +792,113 @@ function Select(props: {
       </select>
     </div>
   );
+}
+
+/**
+ * Text/password field for the integrations card. `locked` is the name of the
+ * env var that owns the value (or null when editable); a locked field renders
+ * disabled and the server ignores its submitted value, so the env var wins.
+ */
+function ConfigField(props: {
+  id: string;
+  name: string;
+  label: string;
+  value?: string;
+  type?: string;
+  placeholder?: string;
+  maxLength?: number;
+  hint?: string;
+  locked: string | null;
+  /** Secret fields: flag a typed value as insecure (see `data-secret-input`). */
+  warnInsecure?: boolean;
+  /** Env var recommended as the secure alternative (interpolated in the hint). */
+  insecureEnv?: string;
+  t: TranslateFn;
+}) {
+  const warn = props.warnInsecure && !props.locked;
+  return (
+    <div>
+      <label class="label" for={props.id}>
+        {props.label}
+      </label>
+      <input
+        id={props.id}
+        name={props.name}
+        type={props.type ?? 'text'}
+        value={props.value ?? ''}
+        // A placeholder is required for the CSS `:not(:placeholder-shown)`
+        // warning to react to typed values.
+        placeholder={props.placeholder ?? (warn ? ' ' : undefined)}
+        maxlength={props.maxLength}
+        disabled={Boolean(props.locked)}
+        data-secret-input={warn ? '' : undefined}
+        class={`field${props.locked ? ' cursor-not-allowed opacity-60' : ''}`}
+      />
+      {warn ? (
+        <p class="secret-warning mt-1 items-start gap-1 px-1 text-xs text-warning">
+          <span class="material-symbols-outlined icon-xs" aria-hidden="true">
+            warning
+          </span>
+          {props.t('admin.integrations.insecure', { name: props.insecureEnv ?? '' })}
+        </p>
+      ) : null}
+      <EnvLockHint locked={props.locked} hint={props.hint} t={props.t} />
+    </div>
+  );
+}
+
+/** Select counterpart of `ConfigField`, with the same env-lock behaviour. */
+function ConfigSelect(props: {
+  id: string;
+  name: string;
+  label: string;
+  value: string;
+  options: { value: string; label: string }[];
+  hint?: string;
+  locked: string | null;
+  t: TranslateFn;
+}) {
+  return (
+    <div>
+      <label class="label" for={props.id}>
+        {props.label}
+      </label>
+      <select
+        id={props.id}
+        name={props.name}
+        disabled={Boolean(props.locked)}
+        class={`field appearance-none pr-10${props.locked ? ' cursor-not-allowed opacity-60' : ''}`}
+      >
+        {props.options.map((option) => (
+          <option value={option.value} selected={option.value === props.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+      <EnvLockHint locked={props.locked} hint={props.hint} t={props.t} />
+    </div>
+  );
+}
+
+/** Shows the lock note for env-owned fields, otherwise the optional hint. */
+function EnvLockHint({
+  locked,
+  hint,
+  t,
+}: {
+  locked: string | null;
+  hint?: string;
+  t: TranslateFn;
+}) {
+  if (locked) {
+    return (
+      <p class="mt-1 flex items-center gap-1 px-1 text-xs text-warning">
+        <span class="material-symbols-outlined icon-xs" aria-hidden="true">
+          lock
+        </span>
+        {t('admin.integrations.locked', { name: locked })}
+      </p>
+    );
+  }
+  return hint ? <p class="mt-1 px-1 text-xs text-muted-foreground">{hint}</p> : null;
 }

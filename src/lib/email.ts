@@ -5,8 +5,8 @@
  * errors rather than surfacing transport details.
  */
 import { connect } from 'cloudflare:sockets';
-import type { Env } from '../types';
 import type { TranslateFn } from '../i18n';
+import type { MailerConfig } from './config';
 
 export interface MailMessage {
   to: string;
@@ -298,10 +298,10 @@ class SmtpMailer implements Mailer {
   }
 }
 
-export function getMailer(env: Env): Mailer {
-  if ((env.MAILER_DRIVER ?? '').toLowerCase() === 'smtp' && env.SMTP_HOST) {
-    const port = Number.parseInt(env.SMTP_PORT ?? '', 10) || 465;
-    const configured = (env.SMTP_SECURE ?? '').toLowerCase();
+export function getMailer(config: MailerConfig): Mailer {
+  if (config.driver.toLowerCase() === 'smtp' && config.host) {
+    const port = Number.parseInt(config.port, 10) || 465;
+    const configured = config.secure.toLowerCase();
     const secure: SecureMode =
       configured === 'none' || configured === 'starttls' || configured === 'tls'
         ? (configured as SecureMode)
@@ -309,12 +309,12 @@ export function getMailer(env: Env): Mailer {
           ? 'tls'
           : 'starttls';
     return new SmtpMailer({
-      host: env.SMTP_HOST,
+      host: config.host,
       port,
       secure,
-      user: env.SMTP_USER,
-      password: env.SMTP_PASSWORD,
-      from: env.SMTP_FROM ?? env.SMTP_USER ?? 'no-reply@localhost',
+      user: config.user || undefined,
+      password: config.password || undefined,
+      from: config.from || config.user || 'no-reply@localhost',
     });
   }
   return new ConsoleMailer();

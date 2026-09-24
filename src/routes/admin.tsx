@@ -33,7 +33,14 @@ import {
 import { invalidateAllProfiles, invalidateProfiles } from '../lib/profile-cache';
 import { isTagColor } from '../lib/tags';
 import { isTheme, isVisibility } from '../lib/themes';
-import { isSafeFaviconUrl, text } from '../lib/validate';
+import { isSafeFaviconUrl, isSafeUrl, text } from '../lib/validate';
+import {
+  envLocks,
+  resolveGithub,
+  resolveGravatarMirror,
+  resolveMailer,
+} from '../lib/config';
+import { appUrl } from '../lib/env';
 
 export const adminRoutes = new Hono<AppContext>();
 
@@ -47,6 +54,7 @@ const SAVED_MESSAGES: Record<string, MessageKey> = {
   tags: 'admin.saved.tags',
   user: 'admin.saved.user',
   deleted: 'admin.saved.deleted',
+  config: 'admin.saved.config',
 };
 
 const ERROR_MESSAGES: Record<string, MessageKey> = {
@@ -94,6 +102,22 @@ adminRoutes.get('/admin', async (c) => {
   ]);
   const { message, error } = flash(c);
 
+  const settings = c.get('settings');
+  const github = resolveGithub(c.env, settings);
+  const mailer = resolveMailer(c.env, settings);
+  const integrations = {
+    githubClientId: github.clientId,
+    githubClientSecretSet: Boolean(github.clientSecret),
+    mailerDriver: mailer.driver,
+    smtpHost: mailer.host,
+    smtpPort: mailer.port,
+    smtpSecure: mailer.secure,
+    smtpUser: mailer.user,
+    smtpPasswordSet: Boolean(mailer.password),
+    smtpFrom: mailer.from,
+    gravatarMirror: resolveGravatarMirror(c.env, settings),
+  };
+
   return c.html(
     <AdminView
       appName={c.get('appName')}
@@ -104,7 +128,10 @@ adminRoutes.get('/admin', async (c) => {
       currentUser={navUser(user)}
       selfId={user.id}
       envAdminEmails={envAdminEmails(c.env)}
-      settings={c.get('settings')}
+      settings={settings}
+      integrations={integrations}
+      envLocks={envLocks(c.env)}
+      githubCallbackUrl={`${appUrl(c.env)}/auth/github/callback`}
       stats={stats}
       reserved={reserved}
       tagCategories={tagCategories}
@@ -119,6 +146,7 @@ adminRoutes.get('/admin', async (c) => {
 
 adminRoutes.post('/admin/settings', async (c) => {
   const current = c.get('settings');
+  const locks = envLocks(c.env);
   const body = await c.req.parseBody();
 
   const theme = text(body.default_theme, 30);
@@ -132,7 +160,8 @@ adminRoutes.post('/admin/settings', async (c) => {
   const logoUrl = logoRaw && !isSafeFaviconUrl(logoRaw) ? current.logoUrl : logoRaw;
 
   await saveSettings(c.env, {
-    siteName: text(body.site_name, 60),
+    // Locked by APP_NAME: keep the stored value (the env var is used at runtime).
+    siteName: locks.siteName ? current.siteName : text(body.site_name, 60),
     faviconUrl,
     logoUrl,
     signupsEnabled: is(body.signups_enabled),
@@ -141,10 +170,20 @@ adminRoutes.post('/admin/settings', async (c) => {
     magicLinkEnabled: is(body.magic_link_enabled),
     defaultTheme: isTheme(theme) ? theme : current.defaultTheme,
     defaultVisibility: isVisibility(visibility) ? visibility : current.defaultVisibility,
-    // This form has no code fields; keep the existing blocks intact.
+    // This form has no code or integration fields; keep the existing values.
     customCss: current.customCss,
     customJs: current.customJs,
     customFooter: current.customFooter,
+    githubClientId: current.githubClientId,
+    githubClientSecret: current.githubClientSecret,
+    mailerDriver: current.mailerDriver,
+    smtpHost: current.smtpHost,
+    smtpPort: current.smtpPort,
+    smtpSecure: current.smtpSecure,
+    smtpUser: current.smtpUser,
+    smtpPassword: current.smtpPassword,
+    smtpFrom: current.smtpFrom,
+    gravatarMirror: current.gravatarMirror,
   });
 
   // Cached profile HTML embeds the favicon <link> and the nav logo, so a
@@ -154,6 +193,62 @@ adminRoutes.post('/admin/settings', async (c) => {
   }
 
   return c.redirect('/admin?saved=settings');
+});
+
+const MAX_SECRET = 300;
+
+/**
+ * Saves the GitHub / email / Gravatar integration config. Each field backed by
+ * an environment variable is **locked**: the submitted value is ignored (the
+ * env var always wins), matching the disabled controls in the view. Secret
+ * fields are never echoed back, so a blank value keeps the stored one.
+ */
+adminRoutes.post('/admin/config', async (c) => {
+  const current = c.get('settings');
+  const locks = envLocks(c.env);
+  const body = await c.req.parseBody();
+  const next = { ...current };
+
+  if (!locks.githubClientId) {
+    next.githubClientId = text(body.github_client_id, 200);
+  }
+  if (!locks.githubClientSecret) {
+    const secret = str(body.github_client_secret);
+    if (secret) next.githubClientSecret = secret.slice(0, MAX_SECRET);
+  }
+
+  if (!locks.mailerDriver) {
+    next.mailerDriver = text(body.mailer_driver, 20) === 'smtp' ? 'smtp' : '';
+  }
+  if (!locks.smtpHost) {
+    next.smtpHost = text(body.smtp_host, 200);
+  }
+  if (!locks.smtpPort) {
+    next.smtpPort = text(body.smtp_port, 10).replace(/[^0-9]/g, '').slice(0, 5);
+  }
+  if (!locks.smtpSecure) {
+    const secure = text(body.smtp_secure, 20);
+    next.smtpSecure = secure === 'tls' || secure === 'starttls' || secure === 'none' ? secure : '';
+  }
+  if (!locks.smtpUser) {
+    next.smtpUser = text(body.smtp_user, 200);
+  }
+  if (!locks.smtpPassword) {
+    const password = str(body.smtp_password);
+    if (password) next.smtpPassword = password.slice(0, MAX_SECRET);
+  }
+  if (!locks.smtpFrom) {
+    next.smtpFrom = text(body.smtp_from, 200);
+  }
+
+  if (!locks.gravatarMirror) {
+    const mirror = text(body.gravatar_mirror, 500);
+    // A non-empty but unsafe URL keeps the current value.
+    next.gravatarMirror = mirror && !isSafeUrl(mirror) ? current.gravatarMirror : mirror;
+  }
+
+  await saveSettings(c.env, next);
+  return c.redirect('/admin?saved=config');
 });
 
 const MAX_CUSTOM_CODE = 32768;

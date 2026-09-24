@@ -41,8 +41,8 @@ npm run dev      # 启动开发服务器（http://localhost:8787）
 部署后需完成：
 
 1. 初始化数据库：在Cloudflare Dashboard执行 `wrangler d1 execute <库名> --remote --file=./schema.sql`
-2. 配置环境变量：`APP_URL`（必填）、`GRAVATAR_MIRROR`（可选）
-3. 配置密钥：`GITHUB_CLIENT_ID/SECRET`、`ADMIN_EMAILS`等（可选）
+2. 配置环境变量：`APP_URL`（必填）
+3. 可选配置：站点名称、GitHub 登录、邮件（SMTP）与 Gravatar 可在管理面板 `/admin` 中设置；也可用环境变量（`APP_NAME`、`GITHUB_CLIENT_ID/SECRET`、`MAILER_DRIVER`/`SMTP_*`、`GRAVATAR_MIRROR`、`ADMIN_EMAILS`）。环境变量优先，已由环境变量设置的项在控制台中会自动锁定，无法修改。
 
 ## 贡献
 

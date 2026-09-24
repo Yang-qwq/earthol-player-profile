@@ -150,4 +150,4 @@ worker-configuration.d.ts
 
 # Generated assets
 public/styles.css
-public/htmx.min.js
+public/vendor/

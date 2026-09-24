@@ -1,8 +1,9 @@
 /**
  * GitHub OAuth helpers: authorize URL, code→token exchange, and the user/email
  * fetches. Optional at runtime — the login page hides GitHub when unconfigured.
+ * Credentials are resolved (env over admin settings) by `lib/config`.
  */
-import type { Env } from '../types';
+import type { GithubConfig } from './config';
 
 const AUTHORIZE_URL = 'https://github.com/login/oauth/authorize';
 const TOKEN_URL = 'https://github.com/login/oauth/access_token';
@@ -18,13 +19,17 @@ export interface GithubUser {
   email: string | null;
 }
 
-export function githubConfigured(env: Env): boolean {
-  return Boolean(env.GITHUB_CLIENT_ID && env.GITHUB_CLIENT_SECRET);
+export function githubConfigured(config: GithubConfig): boolean {
+  return Boolean(config.clientId && config.clientSecret);
 }
 
-export function githubAuthorizeUrl(env: Env, state: string, redirectUri: string): string {
+export function githubAuthorizeUrl(
+  config: GithubConfig,
+  state: string,
+  redirectUri: string,
+): string {
   const params = new URLSearchParams({
-    client_id: env.GITHUB_CLIENT_ID ?? '',
+    client_id: config.clientId,
     redirect_uri: redirectUri,
     scope: SCOPES,
     state,
@@ -34,7 +39,7 @@ export function githubAuthorizeUrl(env: Env, state: string, redirectUri: string)
 }
 
 export async function exchangeGithubCode(
-  env: Env,
+  config: GithubConfig,
   code: string,
   redirectUri: string,
 ): Promise<string> {
@@ -42,8 +47,8 @@ export async function exchangeGithubCode(
     method: 'POST',
     headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      client_id: env.GITHUB_CLIENT_ID,
-      client_secret: env.GITHUB_CLIENT_SECRET,
+      client_id: config.clientId,
+      client_secret: config.clientSecret,
       code,
       redirect_uri: redirectUri,
     }),

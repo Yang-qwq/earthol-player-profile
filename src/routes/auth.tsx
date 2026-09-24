@@ -13,6 +13,7 @@ import {
   getLoginToken,
 } from '../db/queries';
 import { linkIdentity, resolveAccount } from '../lib/accounts';
+import { resolveGithub, resolveMailer } from '../lib/config';
 import { requireAuth } from '../middleware/auth';
 import { createSession, destroySession } from '../lib/session';
 import { randomToken, sha256Hex } from '../lib/crypto';
@@ -72,7 +73,7 @@ authRoutes.get('/login', (c) => {
       customJs={settings.customJs}
       customFooter={settings.customFooter}
       csrfToken={c.get('csrfToken')}
-      githubEnabled={githubConfigured(c.env) && settings.githubLoginEnabled}
+      githubEnabled={githubConfigured(resolveGithub(c.env, settings)) && settings.githubLoginEnabled}
       magicEnabled={settings.magicLinkEnabled}
       next={next}
       error={errorMessage(c.req.query('error'), t)}
@@ -85,7 +86,9 @@ authRoutes.get('/login', (c) => {
 });
 
 authRoutes.get('/auth/github', async (c) => {
-  if (!githubConfigured(c.env) || !c.get('settings').githubLoginEnabled) {
+  const settings = c.get('settings');
+  const github = resolveGithub(c.env, settings);
+  if (!githubConfigured(github) || !settings.githubLoginEnabled) {
     return c.redirect('/login?error=github_unavailable');
   }
 
@@ -96,12 +99,14 @@ authRoutes.get('/auth/github', async (c) => {
   });
 
   const redirectUri = `${appUrl(c.env)}/auth/github/callback`;
-  return c.redirect(githubAuthorizeUrl(c.env, state, redirectUri));
+  return c.redirect(githubAuthorizeUrl(github, state, redirectUri));
 });
 
 /** Starts an OAuth flow that links GitHub to the signed-in account. */
 authRoutes.get('/auth/github/link', requireAuth, async (c) => {
-  if (!githubConfigured(c.env) || !c.get('settings').githubLoginEnabled) {
+  const settings = c.get('settings');
+  const github = resolveGithub(c.env, settings);
+  if (!githubConfigured(github) || !settings.githubLoginEnabled) {
     return c.redirect('/dashboard?error=github_unavailable');
   }
 
@@ -114,7 +119,7 @@ authRoutes.get('/auth/github/link', requireAuth, async (c) => {
   );
 
   const redirectUri = `${appUrl(c.env)}/auth/github/callback`;
-  return c.redirect(githubAuthorizeUrl(c.env, state, redirectUri));
+  return c.redirect(githubAuthorizeUrl(github, state, redirectUri));
 });
 
 authRoutes.get('/auth/github/callback', async (c) => {
@@ -138,7 +143,11 @@ authRoutes.get('/auth/github/callback', async (c) => {
 
   try {
     const redirectUri = `${appUrl(c.env)}/auth/github/callback`;
-    const accessToken = await exchangeGithubCode(c.env, code, redirectUri);
+    const accessToken = await exchangeGithubCode(
+      resolveGithub(c.env, c.get('settings')),
+      code,
+      redirectUri,
+    );
     const ghUser = await fetchGithubUser(accessToken);
     const email = ghUser.email ?? (await fetchGithubPrimaryEmail(accessToken));
 
@@ -181,6 +190,7 @@ authRoutes.post('/auth/email', async (c) => {
   const body = await c.req.parseBody();
   const rawEmail = typeof body.email === 'string' ? body.email : '';
   const next = safeNext(body.next, appUrl(c.env));
+  const github = resolveGithub(c.env, settings);
 
   const render = (message?: string, error?: string) =>
     c.html(
@@ -192,7 +202,7 @@ authRoutes.post('/auth/email', async (c) => {
         customJs={settings.customJs}
         customFooter={settings.customFooter}
         csrfToken={c.get('csrfToken')}
-        githubEnabled={githubConfigured(c.env) && settings.githubLoginEnabled}
+        githubEnabled={githubConfigured(github) && settings.githubLoginEnabled}
         magicEnabled={settings.magicLinkEnabled}
         next={next}
         message={message}
@@ -230,7 +240,10 @@ authRoutes.post('/auth/email', async (c) => {
     `${appUrl(c.env)}/auth/email/verify?token=${encodeURIComponent(token)}` +
     (next ? `&next=${encodeURIComponent(next)}` : '');
   try {
-    await getMailer(c.env).send({ to: email, ...magicLinkEmail(t, link, c.get('appName')) });
+    await getMailer(resolveMailer(c.env, settings)).send({
+      to: email,
+      ...magicLinkEmail(t, link, c.get('appName')),
+    });
   } catch (error) {
     console.error('Magic-link email failed', error);
     return render(undefined, t('auth.err.sendFailed'));

@@ -20,6 +20,16 @@ export interface SiteSettings {
   customCss: string;
   customJs: string;
   customFooter: string;
+  githubClientId: string;
+  githubClientSecret: string;
+  mailerDriver: string;
+  smtpHost: string;
+  smtpPort: string;
+  smtpSecure: string;
+  smtpUser: string;
+  smtpPassword: string;
+  smtpFrom: string;
+  gravatarMirror: string;
 }
 
 const CACHE_KEY = 'settings:all';
@@ -38,6 +48,16 @@ const KEY = {
   customCss: 'custom_css',
   customJs: 'custom_js',
   customFooter: 'custom_footer',
+  githubClientId: 'github_client_id',
+  githubClientSecret: 'github_client_secret',
+  mailerDriver: 'mailer_driver',
+  smtpHost: 'smtp_host',
+  smtpPort: 'smtp_port',
+  smtpSecure: 'smtp_secure',
+  smtpUser: 'smtp_user',
+  smtpPassword: 'smtp_password',
+  smtpFrom: 'smtp_from',
+  gravatarMirror: 'gravatar_mirror',
 };
 
 const DEFAULTS: SiteSettings = {
@@ -53,6 +73,16 @@ const DEFAULTS: SiteSettings = {
   customCss: '',
   customJs: '',
   customFooter: '',
+  githubClientId: '',
+  githubClientSecret: '',
+  mailerDriver: '',
+  smtpHost: '',
+  smtpPort: '',
+  smtpSecure: '',
+  smtpUser: '',
+  smtpPassword: '',
+  smtpFrom: '',
+  gravatarMirror: '',
 };
 
 function toBool(value: string | undefined, fallback: boolean): boolean {
@@ -92,6 +122,16 @@ export async function getSettings(env: Env): Promise<SiteSettings> {
     customCss: map[KEY.customCss] ?? DEFAULTS.customCss,
     customJs: map[KEY.customJs] ?? DEFAULTS.customJs,
     customFooter: map[KEY.customFooter] ?? DEFAULTS.customFooter,
+    githubClientId: map[KEY.githubClientId] ?? DEFAULTS.githubClientId,
+    githubClientSecret: map[KEY.githubClientSecret] ?? DEFAULTS.githubClientSecret,
+    mailerDriver: map[KEY.mailerDriver] ?? DEFAULTS.mailerDriver,
+    smtpHost: map[KEY.smtpHost] ?? DEFAULTS.smtpHost,
+    smtpPort: map[KEY.smtpPort] ?? DEFAULTS.smtpPort,
+    smtpSecure: map[KEY.smtpSecure] ?? DEFAULTS.smtpSecure,
+    smtpUser: map[KEY.smtpUser] ?? DEFAULTS.smtpUser,
+    smtpPassword: map[KEY.smtpPassword] ?? DEFAULTS.smtpPassword,
+    smtpFrom: map[KEY.smtpFrom] ?? DEFAULTS.smtpFrom,
+    gravatarMirror: map[KEY.gravatarMirror] ?? DEFAULTS.gravatarMirror,
   };
 
   try {
@@ -118,6 +158,16 @@ export async function saveSettings(env: Env, settings: SiteSettings): Promise<vo
     [KEY.customCss]: settings.customCss,
     [KEY.customJs]: settings.customJs,
     [KEY.customFooter]: settings.customFooter,
+    [KEY.githubClientId]: settings.githubClientId,
+    [KEY.githubClientSecret]: settings.githubClientSecret,
+    [KEY.mailerDriver]: settings.mailerDriver,
+    [KEY.smtpHost]: settings.smtpHost,
+    [KEY.smtpPort]: settings.smtpPort,
+    [KEY.smtpSecure]: settings.smtpSecure,
+    [KEY.smtpUser]: settings.smtpUser,
+    [KEY.smtpPassword]: settings.smtpPassword,
+    [KEY.smtpFrom]: settings.smtpFrom,
+    [KEY.gravatarMirror]: settings.gravatarMirror,
   });
   try {
     await env.KV.delete(CACHE_KEY);
@@ -126,6 +176,11 @@ export async function saveSettings(env: Env, settings: SiteSettings): Promise<vo
   }
 }
 
+/**
+ * App display name. The `APP_NAME` env var wins over the admin `siteName`
+ * setting (which itself wins over the built-in default), matching the env-lock
+ * rule: when `APP_NAME` is set, the console cannot change the name.
+ */
 export function resolveAppName(env: Env, settings: SiteSettings): string {
-  return settings.siteName.trim() || appName(env);
+  return env.APP_NAME?.trim() || settings.siteName.trim() || appName(env);
 }

@@ -207,6 +207,21 @@
   }
 }
 
+/* Secret inputs (GitHub client secret / SMTP password) turn amber as soon as a
+   value is typed: unlike an env var, a value saved through the console is kept
+   unencrypted in the database. The unlayered rule outranks the layered `.field`
+   background/border so the warning holds even while the input is focused. */
+[data-secret-input]:not(:placeholder-shown) {
+  border-color: hsl(var(--warning));
+  background-color: hsl(var(--warning) / 0.12);
+}
+.secret-warning {
+  display: none;
+}
+[data-secret-input]:not(:placeholder-shown) ~ .secret-warning {
+  display: flex;
+}
+
 /* Tag autocomplete dropdown (created by TAG_AUTOCOMPLETE_SCRIPT) */
 .tag-suggest {
   position: absolute;
