@@ -115,7 +115,7 @@ export function Profile({
         <div class="card overflow-hidden">
           <div class={`h-28 bg-gradient-to-r ${theme.accent}`} />
           <div class="px-6 pb-6">
-            <div class="-mt-14 flex items-end justify-between gap-4">
+            <div class="-mt-14 flex">
               {user.avatar_url ? (
                 <img
                   src={user.avatar_url}
@@ -133,8 +133,56 @@ export function Profile({
               )}
             </div>
 
-            <h1 class="mt-4 text-2xl font-bold tracking-tight">{name}</h1>
-            <p class="text-sm font-medium text-muted-foreground">@{user.username}</p>
+            <div class="mt-4 flex items-center justify-between gap-4">
+              <div class="min-w-0">
+                <h1 class="truncate text-2xl font-bold tracking-tight">{name}</h1>
+                <p class="truncate text-sm font-medium text-muted-foreground">@{user.username}</p>
+              </div>
+              {/* Placeholder actions (no behavior yet; the report option in the
+                  menu is hidden until that feature ships). Aligned with the
+                  name row, clear of the avatar and the banner. */}
+              <div class="flex shrink-0 items-center gap-1.5">
+                <button
+                  type="button"
+                  class="btn-icon"
+                  data-profile-follow
+                  aria-label={t('profile.follow')}
+                  title={t('profile.follow')}
+                >
+                  <span class="material-symbols-outlined" aria-hidden="true">
+                    add_circle
+                  </span>
+                </button>
+                <div class="dropdown" data-dropdown>
+                  <button
+                    type="button"
+                    class="btn-icon"
+                    data-dropdown-toggle
+                    aria-label={t('profile.more')}
+                    title={t('profile.more')}
+                    aria-haspopup="menu"
+                    aria-expanded="false"
+                  >
+                    <span class="material-symbols-outlined" aria-hidden="true">
+                      more_horiz
+                    </span>
+                  </button>
+                  <div class="dropdown-menu" data-dropdown-menu role="menu">
+                    <button
+                      type="button"
+                      role="menuitem"
+                      data-profile-report
+                      class="hidden w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
+                    >
+                      <span class="material-symbols-outlined icon-sm" aria-hidden="true">
+                        report
+                      </span>
+                      {t('profile.report')}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
             {user.headline ? <p class="mt-2 text-foreground/90">{user.headline}</p> : null}
 
             <div class="mt-4 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">

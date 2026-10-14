@@ -178,6 +178,9 @@ export const en = {
 
   'profile.defaultDescription': 'Player profile for @{username} on {appName}',
   'profile.edit': 'Edit profile',
+  'profile.follow': 'Follow',
+  'profile.more': 'More options',
+  'profile.report': 'Report',
   'profile.shareHeading': 'Share profile',
   'profile.shareSubtitle': 'Point a QR code or an NFC tag at this profile.',
   'profile.shareUrl': 'Profile link',

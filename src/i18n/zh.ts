@@ -177,6 +177,9 @@ export const zh: Record<keyof typeof en, string> = {
 
   'profile.defaultDescription': '{appName} 上 @{username} 的玩家档案',
   'profile.edit': '编辑资料',
+  'profile.follow': '关注',
+  'profile.more': '更多操作',
+  'profile.report': '举报',
   'profile.shareHeading': '分享主页',
   'profile.shareSubtitle': '用二维码或 NFC 标签指向这份玩家档案。',
   'profile.shareUrl': '主页链接',
