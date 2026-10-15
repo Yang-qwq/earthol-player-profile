@@ -104,7 +104,7 @@ export function Dashboard({
       title={section === 'profile' ? t('dash.title') : sectionMeta ? t(sectionMeta.key) : t('dash.title')}
       shell="console"
       csrfToken={csrfToken}
-      currentUser={{ username: user.username ?? '', displayName: user.display_name }}
+      currentUser={{ username: user.username ?? '', displayName: user.display_name, avatarUrl: user.avatar_url }}
       nonce={nonce}
       t={t}
       locale={locale}

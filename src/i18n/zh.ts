@@ -14,7 +14,6 @@ export const zh: Record<keyof typeof en, string> = {
   'nav.viewProfile': '查看主页',
   'nav.publicProfile': '公开主页',
   'nav.workspace': '工作区',
-  'nav.profile': '个人资料',
   'dash.field.moveUp': '上移字段',
   'dash.field.moveDown': '下移字段',
   'dash.tag.moveUp': '上移标签',
@@ -215,7 +214,7 @@ export const zh: Record<keyof typeof en, string> = {
   'auth.err.invalidEmail': '请输入有效的邮箱地址。',
   'auth.err.rateLimited': '请求过于频繁，请稍后再试。',
   'auth.err.sendFailed': '登录邮件发送失败，请稍后重试。',
-  'auth.emailSent': '如果该邮箱可以登录，登录链接已在发送途中。',
+  'auth.emailSent': '登录链接已发送。',
   'auth.err.totpDisabled': '当前部署未启用动态验证码登录。',
   'auth.err.totpInvalid': '验证码或账号不正确，请检查验证器后重试。',
 

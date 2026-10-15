@@ -12,7 +12,6 @@ export const en = {
   'nav.viewProfile': 'View profile',
   'nav.publicProfile': 'Public profile',
   'nav.workspace': 'Workspace',
-  'nav.profile': 'Profile',
   'dash.field.moveUp': 'Move field up',
   'dash.field.moveDown': 'Move field down',
   'dash.tag.moveUp': 'Move tag up',

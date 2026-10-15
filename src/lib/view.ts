@@ -3,7 +3,7 @@ import type { UserRow } from '../db/types';
 
 export function navUser(
   user: UserRow | null | undefined,
-): { username: string; displayName: string | null } | null {
+): { username: string; displayName: string | null; avatarUrl: string | null } | null {
   if (!user) return null;
-  return { username: user.username ?? '', displayName: user.display_name };
+  return { username: user.username ?? '', displayName: user.display_name, avatarUrl: user.avatar_url };
 }

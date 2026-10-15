@@ -15,7 +15,7 @@ export interface LayoutProps {
   appName: string;
   faviconUrl: string;
   logoUrl?: string;
-  currentUser?: { username: string; displayName?: string | null } | null;
+  currentUser?: { username: string; displayName?: string | null; avatarUrl?: string | null } | null;
   csrfToken?: string;
   robots?: string;
   canonical?: string;
@@ -543,27 +543,31 @@ function ConsoleShell({
               {t('nav.publicProfile')}
             </a>
           ) : null}
+        </nav>
 
-          {username ? (
-            <>
-              <p class="px-3 pb-1 pt-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                {t('nav.profile')}
-              </p>
-              <div class="flex items-center gap-3 rounded-xl px-3 py-2.5">
-                <span class="grid h-9 w-9 place-items-center rounded-full bg-gradient-to-br from-primary to-secondary text-xs font-bold text-primary-foreground">
-                  {username.slice(0, 2).toUpperCase()}
-                </span>
+        <div class="border-t border-border p-3">
+          <div class="flex items-center justify-end gap-3 px-1 py-1">
+            {username ? (
+              <div class="flex min-w-0 flex-1 items-center gap-3">
+                {currentUser?.avatarUrl ? (
+                  <img
+                    src={currentUser.avatarUrl}
+                    alt={currentUser.displayName || username}
+                    width="36"
+                    height="36"
+                    class="h-9 w-9 shrink-0 rounded-full object-cover"
+                  />
+                ) : (
+                  <span class="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-gradient-to-br from-primary to-secondary text-xs font-bold text-primary-foreground">
+                    {username.slice(0, 2).toUpperCase()}
+                  </span>
+                )}
                 <div class="min-w-0">
                   <p class="truncate text-sm font-semibold">{currentUser?.displayName || username}</p>
                   <p class="truncate text-xs text-muted-foreground">@{username}</p>
                 </div>
               </div>
-            </>
-          ) : null}
-        </nav>
-
-        <div class="border-t border-border p-3">
-          <div class="flex items-center justify-end px-1 py-1">
+            ) : null}
             <UserMenu currentUser={currentUser} csrfToken={csrfToken} t={t} />
           </div>
         </div>
