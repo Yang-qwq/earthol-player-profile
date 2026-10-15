@@ -26,6 +26,7 @@ export interface ProfileProps {
   isOwner?: boolean;
   isFollowing?: boolean;
   followerCount?: number;
+  followingCount?: number;
   canonical?: string;
   robots?: string;
   nonce?: string;
@@ -35,7 +36,7 @@ export interface ProfileProps {
   isAdmin?: boolean;
 }
 
-function initials(user: UserRow): string {
+export function initials(user: UserRow): string {
   const source = user.display_name || user.username || '?';
   return source
     .split(/\s+/)
@@ -45,36 +46,23 @@ function initials(user: UserRow): string {
 }
 
 /**
- * The follow button cluster shown on a profile: owners get an edit link,
- * logged-in visitors get a follow/unfollow toggle (htmx swaps this whole
- * block in place via `POST /api/follow/:username`; the native form fallback
- * reloads the page), and anonymous visitors get a link into sign-in with the
- * profile as `next`. The follower count is viewer-independent, so it is safe
- * to bake into the cached anonymous HTML.
+ * The follow button cluster shown on a profile (and per row on the
+ * followers/following list pages): owners get an edit link, logged-in
+ * visitors get a follow/unfollow toggle (htmx swaps this whole block in place
+ * via `POST /api/follow/:username`; the native form fallback reloads the
+ * page), and anonymous visitors get a link into sign-in with the profile as
+ * `next`.
  */
 export function FollowControl(props: {
   username: string;
   isOwner: boolean;
   isLoggedIn: boolean;
   isFollowing: boolean;
-  followerCount: number;
   csrfToken: string;
   notice?: string;
   t: TranslateFn;
 }) {
-  const {
-    username,
-    isOwner,
-    isLoggedIn,
-    isFollowing,
-    followerCount,
-    csrfToken,
-    notice,
-    t,
-  } = props;
-  const countText = t(followerCount === 1 ? 'profile.followersOne' : 'profile.followersMany', {
-    count: String(followerCount),
-  });
+  const { username, isOwner, isLoggedIn, isFollowing, csrfToken, notice, t } = props;
   const followUrl = `/api/follow/${encodeURIComponent(username)}`;
   const loginUrl = `/login?next=${encodeURIComponent(`/${username}`)}`;
 
@@ -105,9 +93,6 @@ export function FollowControl(props: {
           </span>
           {t('profile.follow')}
         </a>
-        {followerCount > 0 ? (
-          <span class="text-xs tabular-nums text-muted-foreground">{countText}</span>
-        ) : null}
       </div>
     );
   }
@@ -136,14 +121,37 @@ export function FollowControl(props: {
           {t(isFollowing ? 'profile.following' : 'profile.follow')}
         </button>
       </form>
-      {followerCount > 0 ? (
-        <span class="text-xs tabular-nums text-muted-foreground">{countText}</span>
-      ) : null}
       {notice ? (
         <span class="text-xs text-danger" role="status">
           {notice}
         </span>
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * The follower/following stats row shown under the profile header (and on the
+ * two list pages). Both counts are attributes of the profiled user, not the
+ * viewer, so the row is safe to bake into the cached anonymous HTML.
+ */
+export function FollowStats(props: {
+  username: string;
+  followerCount: number;
+  followingCount: number;
+  t: TranslateFn;
+}) {
+  const { username, followerCount, followingCount, t } = props;
+  return (
+    <div class="flex items-center gap-4 text-sm">
+      <a class="hover:underline" href={`/${encodeURIComponent(username)}/followers`}>
+        <span class="font-bold tabular-nums">{followerCount}</span>{' '}
+        <span class="text-muted-foreground">{t('profile.followers')}</span>
+      </a>
+      <a class="hover:underline" href={`/${encodeURIComponent(username)}/following`}>
+        <span class="font-bold tabular-nums">{followingCount}</span>{' '}
+        <span class="text-muted-foreground">{t('profile.following')}</span>
+      </a>
     </div>
   );
 }
@@ -170,6 +178,7 @@ export function Profile({
   isOwner,
   isFollowing,
   followerCount,
+  followingCount,
   canonical,
   robots,
   nonce,
@@ -256,7 +265,6 @@ export function Profile({
                   isOwner={Boolean(isOwner)}
                   isLoggedIn={Boolean(currentUser)}
                   isFollowing={Boolean(isFollowing)}
-                  followerCount={followerCount ?? 0}
                   csrfToken={csrfToken}
                   t={t}
                 />
@@ -290,6 +298,16 @@ export function Profile({
                 </div>
               </div>
             </div>
+
+            <div class="mt-3">
+              <FollowStats
+                username={user.username ?? ''}
+                followerCount={followerCount ?? 0}
+                followingCount={followingCount ?? 0}
+                t={t}
+              />
+            </div>
+
             {user.headline ? <p class="mt-2 text-foreground/90">{user.headline}</p> : null}
 
             <div class="mt-4 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">

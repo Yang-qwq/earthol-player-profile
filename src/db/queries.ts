@@ -418,13 +418,97 @@ export async function unfollow(
     .run();
 }
 
-/** How many users follow `followingId` (drives the follower count on profiles). */
+/**
+ * How many (non-private) users follow `followingId`. Private profiles are
+ * excluded — like tag suggestions — so the count matches what the followers
+ * list can actually show.
+ */
 export async function countFollowers(db: D1Database, followingId: string): Promise<number> {
   const row = await db
-    .prepare('SELECT COUNT(*) AS n FROM follows WHERE following_id = ?')
+    .prepare(
+      `SELECT COUNT(*) AS n FROM follows f
+       JOIN users u ON u.id = f.follower_id
+       WHERE f.following_id = ? AND u.visibility != 'private'`,
+    )
     .bind(followingId)
     .first<{ n: number }>();
   return row?.n ?? 0;
+}
+
+/** How many (non-private) users `followerId` follows (drives the profile's "following" stat). */
+export async function countFollowing(db: D1Database, followerId: string): Promise<number> {
+  const row = await db
+    .prepare(
+      `SELECT COUNT(*) AS n FROM follows f
+       JOIN users u ON u.id = f.following_id
+       WHERE f.follower_id = ? AND u.visibility != 'private'`,
+    )
+    .bind(followerId)
+    .first<{ n: number }>();
+  return row?.n ?? 0;
+}
+
+/**
+ * The profile rows of everyone who follows `followingId`, newest first.
+ * Users without a handle or with a `private` profile are excluded (they have
+ * no public page to link to); the list is capped at `limit` rows.
+ */
+export async function listFollowers(
+  db: D1Database,
+  followingId: string,
+  limit = 100,
+): Promise<UserRow[]> {
+  const result = await db
+    .prepare(
+      `SELECT u.* FROM follows f
+       JOIN users u ON u.id = f.follower_id
+       WHERE f.following_id = ? AND u.username IS NOT NULL AND u.visibility != 'private'
+       ORDER BY f.created_at DESC, f.follower_id ASC
+       LIMIT ?`,
+    )
+    .bind(followingId, limit)
+    .all<UserRow>();
+  return result.results ?? [];
+}
+
+/** The profile rows everyone that `followerId` follows, newest first (see `listFollowers`). */
+export async function listFollowing(
+  db: D1Database,
+  followerId: string,
+  limit = 100,
+): Promise<UserRow[]> {
+  const result = await db
+    .prepare(
+      `SELECT u.* FROM follows f
+       JOIN users u ON u.id = f.following_id
+       WHERE f.follower_id = ? AND u.username IS NOT NULL AND u.visibility != 'private'
+       ORDER BY f.created_at DESC, f.following_id ASC
+       LIMIT ?`,
+    )
+    .bind(followerId, limit)
+    .all<UserRow>();
+  return result.results ?? [];
+}
+
+/**
+ * Which of `followingIds` does `followerId` already follow (drives the per-row
+ * follow toggle on the followers/following list pages). One batched query.
+ */
+export async function listFollowingIds(
+  db: D1Database,
+  followerId: string,
+  followingIds: string[],
+): Promise<string[]> {
+  if (followingIds.length === 0) return [];
+  const placeholders = followingIds.map(() => '?').join(', ');
+  const result = await db
+    .prepare(
+      `SELECT following_id FROM follows
+       WHERE follower_id = ? AND following_id IN (${placeholders})`,
+    )
+    .bind(followerId, ...followingIds)
+    .all<{ following_id: string }>();
+  return (result.results ?? []).map((row) => row.following_id);
 }
 
 /* ----------------------------- login tokens --------------------------- */

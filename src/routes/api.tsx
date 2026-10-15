@@ -10,7 +10,6 @@ import type { AppContext } from '../types';
 import type { UserRow } from '../db/types';
 import { FollowControl } from '../views/profile';
 import {
-  countFollowers,
   follow,
   getUserByUsername,
   isFollowing,
@@ -72,26 +71,19 @@ apiRoutes.get('/api/tag-suggestions', async (c) => {
 });
 
 /** Renders just the `data-follow-control` cluster for an in-place htmx swap.
-    `forced` carries the fresh state right after a toggle, avoiding re-queries. */
+    `knownFollowing` carries the fresh state right after a toggle, avoiding a re-query. */
 async function renderFollowControl(
   c: Context<AppContext>,
   viewer: UserRow | null,
   target: UserRow,
   notice?: string,
-  forced?: { following: boolean; count: number },
+  knownFollowing?: boolean,
 ) {
   const t = c.get('t');
   const isOwner = Boolean(viewer && viewer.id === target.id);
-  let following = false;
-  let count = 0;
-  if (forced) {
-    following = forced.following;
-    count = forced.count;
-  } else if (viewer && !isOwner) {
-    [following, count] = await Promise.all([
-      isFollowing(c.env.DB, viewer.id, target.id),
-      countFollowers(c.env.DB, target.id),
-    ]);
+  let following = Boolean(knownFollowing);
+  if (knownFollowing === undefined && viewer && !isOwner) {
+    following = await isFollowing(c.env.DB, viewer.id, target.id);
   }
   return c.html(
     <FollowControl
@@ -99,7 +91,6 @@ async function renderFollowControl(
       isOwner={isOwner}
       isLoggedIn={Boolean(viewer)}
       isFollowing={following}
-      followerCount={count}
       csrfToken={c.get('csrfToken')}
       notice={notice}
       t={t}
@@ -111,8 +102,9 @@ async function renderFollowControl(
  * Toggles the follow edge between the signed-in viewer and `:username`
  * (follows if absent, unfollows if present). Returns the fresh follow
  * cluster as an htmx fragment, or redirects back to the profile when the
- * request is a plain form fallback. Only the followed profile's cached HTML
- * is affected (its follower count), so that handle is the one invalidated.
+ * request is a plain form fallback. The edge touches two profiles — the
+ * target's follower count and the viewer's following count, each baked into
+ * the other's cached pages — so both handles are invalidated.
  */
 apiRoutes.post('/api/follow/:username', async (c) => {
   const t = c.get('t');
@@ -143,17 +135,13 @@ apiRoutes.post('/api/follow/:username', async (c) => {
     await follow(c.env.DB, viewer.id, target.id);
   }
   const nowFollowing = !wasFollowing;
-  const followerCount = await countFollowers(c.env.DB, target.id);
-  await invalidateProfiles(c.env.KV, [target.username]);
+  await invalidateProfiles(c.env.KV, [target.username, viewer.username]);
 
   // Plain form fallback (no htmx): the profile page re-renders fresh for a
   // logged-in viewer, so a redirect is enough to show the new state.
   if (!isHtmx) return c.redirect(path);
 
-  return renderFollowControl(c, viewer ?? null, target, undefined, {
-    following: nowFollowing,
-    count: followerCount,
-  });
+  return renderFollowControl(c, viewer, target, undefined, nowFollowing);
 });
 
 apiRoutes.get('/sitemap.xml', async (c) => {

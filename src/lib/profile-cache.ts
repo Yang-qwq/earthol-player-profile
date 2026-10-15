@@ -1,11 +1,18 @@
 /**
  * KV cache for rendered public profile HTML. Keys are **locale-scoped**
- * (`profile:html:<locale>:<username>`) because output now depends on the
- * active language, so invalidation must clear one entry per locale.
+ * (`profile:html:<locale>:<username>`) because output depends on the active
+ * language, so invalidation must clear one entry per locale. Each profile has
+ * up to three cached pages — the profile itself plus its followers/following
+ * list pages (`:followers` / `:following` suffixes) — and all variants of a
+ * handle are purged together.
  */
 import { LOCALES, type Locale } from '../i18n';
 
 const TTL_SECONDS = 300;
+
+/** Cacheable variants of a profile's HTML: the page itself plus its two follow list pages. */
+export const PROFILE_VARIANTS = ['', ':followers', ':following'] as const;
+export type ProfileVariant = (typeof PROFILE_VARIANTS)[number];
 
 /**
  * Cacheable HTML must not embed the per-request CSP nonce: a cached copy would
@@ -21,16 +28,17 @@ export function withNonce(html: string, nonce: string): string {
   return nonce ? html.split(NONCE_PLACEHOLDER).join(nonce) : html;
 }
 
-function keyFor(locale: Locale, username: string): string {
-  return `profile:html:${locale}:${username.toLowerCase()}`;
+function keyFor(locale: Locale, username: string, variant: ProfileVariant = ''): string {
+  return `profile:html:${locale}:${username.toLowerCase()}${variant}`;
 }
 
 export function getCachedProfile(
   kv: KVNamespace,
   locale: Locale,
   username: string,
+  variant: ProfileVariant = '',
 ): Promise<string | null> {
-  return kv.get(keyFor(locale, username));
+  return kv.get(keyFor(locale, username, variant));
 }
 
 export async function setCachedProfile(
@@ -38,8 +46,9 @@ export async function setCachedProfile(
   locale: Locale,
   username: string,
   html: string,
+  variant: ProfileVariant = '',
 ): Promise<void> {
-  await kv.put(keyFor(locale, username), html, { expirationTtl: TTL_SECONDS });
+  await kv.put(keyFor(locale, username, variant), html, { expirationTtl: TTL_SECONDS });
 }
 
 export async function invalidateProfiles(
@@ -47,7 +56,11 @@ export async function invalidateProfiles(
   usernames: (string | null | undefined)[],
 ): Promise<void> {
   const names = usernames.filter((name): name is string => Boolean(name));
-  await Promise.all(names.flatMap((name) => LOCALES.map((locale) => kv.delete(keyFor(locale, name)))));
+  await Promise.all(
+    names.flatMap((name) =>
+      LOCALES.flatMap((locale) => PROFILE_VARIANTS.map((variant) => kv.delete(keyFor(locale, name, variant)))),
+    ),
+  );
 }
 
 /**
