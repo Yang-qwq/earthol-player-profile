@@ -379,6 +379,54 @@ export async function replaceUserTags(
   await db.batch(statements);
 }
 
+/* ------------------------------- follows ------------------------------ */
+
+/** Whether `followerId` already follows `followingId`. */
+export function isFollowing(
+  db: D1Database,
+  followerId: string,
+  followingId: string,
+): Promise<boolean> {
+  return db
+    .prepare('SELECT 1 AS x FROM follows WHERE follower_id = ? AND following_id = ?')
+    .bind(followerId, followingId)
+    .first<{ x: number }>()
+    .then((row) => row !== null);
+}
+
+/** Idempotent: following the same user twice keeps a single row. */
+export async function follow(
+  db: D1Database,
+  followerId: string,
+  followingId: string,
+): Promise<void> {
+  if (followerId === followingId) return;
+  await db
+    .prepare('INSERT OR IGNORE INTO follows (follower_id, following_id, created_at) VALUES (?, ?, ?)')
+    .bind(followerId, followingId, now())
+    .run();
+}
+
+export async function unfollow(
+  db: D1Database,
+  followerId: string,
+  followingId: string,
+): Promise<void> {
+  await db
+    .prepare('DELETE FROM follows WHERE follower_id = ? AND following_id = ?')
+    .bind(followerId, followingId)
+    .run();
+}
+
+/** How many users follow `followingId` (drives the follower count on profiles). */
+export async function countFollowers(db: D1Database, followingId: string): Promise<number> {
+  const row = await db
+    .prepare('SELECT COUNT(*) AS n FROM follows WHERE following_id = ?')
+    .bind(followingId)
+    .first<{ n: number }>();
+  return row?.n ?? 0;
+}
+
 /* ----------------------------- login tokens --------------------------- */
 
 export async function createLoginToken(
@@ -590,6 +638,8 @@ export async function deleteUser(db: D1Database, userId: string): Promise<UserRo
     db.prepare('DELETE FROM fields WHERE user_id = ?').bind(userId),
     db.prepare('DELETE FROM identities WHERE user_id = ?').bind(userId),
     db.prepare('DELETE FROM totp_factors WHERE user_id = ?').bind(userId),
+    db.prepare('DELETE FROM follows WHERE follower_id = ?').bind(userId),
+    db.prepare('DELETE FROM follows WHERE following_id = ?').bind(userId),
     db.prepare('DELETE FROM users WHERE id = ?').bind(userId),
   ];
   // Outstanding magic-link tokens would otherwise still resolve this email.

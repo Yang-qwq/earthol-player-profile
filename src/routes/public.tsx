@@ -8,7 +8,13 @@ import type { AppContext } from '../types';
 import { Layout } from '../views/layout';
 import { Home } from '../views/home';
 import { Profile } from '../views/profile';
-import { getUserByUsername, listFields, listUserTags } from '../db/queries';
+import {
+  countFollowers,
+  getUserByUsername,
+  isFollowing,
+  listFields,
+  listUserTags,
+} from '../db/queries';
 import { NONCE_PLACEHOLDER, getCachedProfile, setCachedProfile, withNonce } from '../lib/profile-cache';
 import { navUser } from '../lib/view';
 import { appUrl } from '../lib/env';
@@ -71,9 +77,16 @@ publicRoutes.get('/:username', async (c) => {
     }
   }
 
-  const [fields, tags] = await Promise.all([
+  // The follower count is viewer-independent, so it is safe to bake into the
+  // cached anonymous HTML; the follow state is viewer-specific and only
+  // logged-in viewers ever reach this code path with a fresh render.
+  const [fields, tags, followerCount, isFollowingFlag] = await Promise.all([
     listFields(c.env.DB, user.id),
     listUserTags(c.env.DB, user.id),
+    countFollowers(c.env.DB, user.id),
+    viewer && !isOwner
+      ? isFollowing(c.env.DB, viewer.id, user.id)
+      : Promise.resolve(false),
   ]);
 
   // Hidden tags stay invisible unless the viewer carries the same value
@@ -101,6 +114,8 @@ publicRoutes.get('/:username', async (c) => {
       csrfToken={c.get('csrfToken')}
       currentUser={navUser(viewer)}
       isOwner={isOwner}
+      isFollowing={isFollowingFlag}
+      followerCount={followerCount}
       canonical={canonical}
       robots={robots}
       nonce={cacheable ? NONCE_PLACEHOLDER : nonce}

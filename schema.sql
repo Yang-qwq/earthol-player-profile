@@ -123,3 +123,17 @@ CREATE TABLE user_tags (
 CREATE INDEX idx_user_tags_user ON user_tags (user_id, sort_order);
 CREATE INDEX idx_user_tags_category ON user_tags (category_id);
 CREATE INDEX idx_user_tags_value ON user_tags (category_id, value);
+
+-- ------------------------------------------------------------------ follows
+-- Directed follow edges: `follower_id` follows `following_id`. One row per
+-- pair (composite PK); both FKs cascade on user deletion. `idx_follows_following`
+-- covers follower count/list queries; the PK covers `WHERE follower_id = ?`.
+CREATE TABLE follows (
+  follower_id  TEXT NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  following_id TEXT NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  created_at   INTEGER NOT NULL,
+  PRIMARY KEY (follower_id, following_id),
+  CHECK (follower_id <> following_id)
+);
+
+CREATE INDEX idx_follows_following ON follows (following_id);

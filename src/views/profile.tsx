@@ -24,6 +24,8 @@ export interface ProfileProps {
   csrfToken: string;
   currentUser?: { username: string; displayName?: string | null } | null;
   isOwner?: boolean;
+  isFollowing?: boolean;
+  followerCount?: number;
   canonical?: string;
   robots?: string;
   nonce?: string;
@@ -40,6 +42,110 @@ function initials(user: UserRow): string {
     .slice(0, 2)
     .map((part) => part.charAt(0).toUpperCase())
     .join('');
+}
+
+/**
+ * The follow button cluster shown on a profile: owners get an edit link,
+ * logged-in visitors get a follow/unfollow toggle (htmx swaps this whole
+ * block in place via `POST /api/follow/:username`; the native form fallback
+ * reloads the page), and anonymous visitors get a link into sign-in with the
+ * profile as `next`. The follower count is viewer-independent, so it is safe
+ * to bake into the cached anonymous HTML.
+ */
+export function FollowControl(props: {
+  username: string;
+  isOwner: boolean;
+  isLoggedIn: boolean;
+  isFollowing: boolean;
+  followerCount: number;
+  csrfToken: string;
+  notice?: string;
+  t: TranslateFn;
+}) {
+  const {
+    username,
+    isOwner,
+    isLoggedIn,
+    isFollowing,
+    followerCount,
+    csrfToken,
+    notice,
+    t,
+  } = props;
+  const countText = t(followerCount === 1 ? 'profile.followersOne' : 'profile.followersMany', {
+    count: String(followerCount),
+  });
+  const followUrl = `/api/follow/${encodeURIComponent(username)}`;
+  const loginUrl = `/login?next=${encodeURIComponent(`/${username}`)}`;
+
+  if (isOwner) {
+    return (
+      <div class="flex shrink-0 items-center gap-2" data-follow-control>
+        <a class="btn-outline" href="/dashboard">
+          <span class="material-symbols-outlined icon-sm" aria-hidden="true">
+            edit
+          </span>
+          {t('profile.edit')}
+        </a>
+        {notice ? (
+          <span class="text-xs text-danger" role="status">
+            {notice}
+          </span>
+        ) : null}
+      </div>
+    );
+  }
+
+  if (!isLoggedIn) {
+    return (
+      <div class="flex shrink-0 items-center gap-2" data-follow-control>
+        <a class="btn-primary" href={loginUrl}>
+          <span class="material-symbols-outlined icon-sm" aria-hidden="true">
+            person_add
+          </span>
+          {t('profile.follow')}
+        </a>
+        {followerCount > 0 ? (
+          <span class="text-xs tabular-nums text-muted-foreground">{countText}</span>
+        ) : null}
+      </div>
+    );
+  }
+
+  return (
+    <div class="flex shrink-0 flex-wrap items-center gap-2" data-follow-control>
+      <form
+        method="post"
+        action={followUrl}
+        hx-post={followUrl}
+        hx-target="closest [data-follow-control]"
+        hx-swap="outerHTML"
+        hx-scroll="false"
+      >
+        <input type="hidden" name="_csrf" value={csrfToken} />
+        <button
+          type="submit"
+          class={isFollowing ? 'btn-outline' : 'btn-primary'}
+          aria-pressed={isFollowing}
+          aria-label={t(isFollowing ? 'profile.following' : 'profile.follow')}
+          title={t(isFollowing ? 'profile.following' : 'profile.follow')}
+        >
+          <span class="material-symbols-outlined icon-sm" aria-hidden="true">
+            {isFollowing ? 'check_circle' : 'person_add'}
+          </span>
+          {t(isFollowing ? 'profile.following' : 'profile.follow')}
+        </button>
+      </form>
+      {followerCount > 0 ? (
+        <span class="text-xs tabular-nums text-muted-foreground">{countText}</span>
+      ) : null}
+      {notice ? (
+        <span class="text-xs text-danger" role="status">
+          {notice}
+        </span>
+      ) : null}
+    </div>
+  );
 }
 
 // Client-side share tools: lazy-loads `qrcode-generator` from unpkg (already
@@ -62,6 +168,8 @@ export function Profile({
   csrfToken,
   currentUser,
   isOwner,
+  isFollowing,
+  followerCount,
   canonical,
   robots,
   nonce,
@@ -138,21 +246,20 @@ export function Profile({
                 <h1 class="truncate text-2xl font-bold tracking-tight">{name}</h1>
                 <p class="truncate text-sm font-medium text-muted-foreground">@{user.username}</p>
               </div>
-              {/* Placeholder actions (no behavior yet; the report option in the
-                  menu is hidden until that feature ships). Aligned with the
-                  name row, clear of the avatar and the banner. */}
+              {/* Follow actions: real toggle for signed-in visitors (htmx
+                  swaps the cluster in place), sign-in prompt for anonymous
+                  viewers, edit shortcut for the owner. The report option in
+                  the menu stays hidden until that feature ships. */}
               <div class="flex shrink-0 items-center gap-1.5">
-                <button
-                  type="button"
-                  class="btn-icon"
-                  data-profile-follow
-                  aria-label={t('profile.follow')}
-                  title={t('profile.follow')}
-                >
-                  <span class="material-symbols-outlined" aria-hidden="true">
-                    add_circle
-                  </span>
-                </button>
+                <FollowControl
+                  username={user.username ?? ''}
+                  isOwner={Boolean(isOwner)}
+                  isLoggedIn={Boolean(currentUser)}
+                  isFollowing={Boolean(isFollowing)}
+                  followerCount={followerCount ?? 0}
+                  csrfToken={csrfToken}
+                  t={t}
+                />
                 <div class="dropdown" data-dropdown>
                   <button
                     type="button"

@@ -55,6 +55,12 @@ export interface UserTagRow {
   category_color: string;
 }
 
+export interface FollowRow {
+  follower_id: string;
+  following_id: string;
+  created_at: number;
+}
+
 export interface LoginTokenRow {
   token_hash: string;
   email: string;
