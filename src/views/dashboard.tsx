@@ -63,6 +63,16 @@ document.addEventListener('change',function(ev){var t=ev.target;if(!t||!t.hasAtt
  * factor. Lazy-loads `qrcode-generator` from unpkg (already allowed by the
  * CSP `scriptSrc`) only when such a factor exists on the page.
  */
+/**
+ * "MFM animations are paused" notice (dashboard authoring forms). The notice
+ * is server-rendered `hidden`; this reveals it only when the browser reports
+ * `prefers-reduced-motion: reduce` — the same query the stylesheet uses to
+ * disable `.mfm-anim` — and remembers a manual dismissal so it stops nagging.
+ * The media-query `change` listener keeps it in sync when the OS setting flips
+ * while the page is open. Delegated, no eval, CSP-compatible.
+ */
+const MFM_MOTION_SCRIPT = `(function(){var KEY='mfm-motion-notice-dismissed';var dismissedNow=false;var mq=window.matchMedia?window.matchMedia('(prefers-reduced-motion: reduce)'):null;function dismissed(){if(dismissedNow)return true;try{return localStorage.getItem(KEY)==='1';}catch(e){return false;}}function apply(){var notes=document.querySelectorAll('[data-mfm-motion-note]');var show=!!(mq&&mq.matches)&&!dismissed();for(var i=0;i<notes.length;i++){notes[i].hidden=!show;}}document.addEventListener('click',function(ev){var el=ev.target;while(el&&el!==document.body){if(el.hasAttribute&&el.hasAttribute('data-mfm-motion-dismiss')){ev.preventDefault();dismissedNow=true;try{localStorage.setItem(KEY,'1');}catch(e){}apply();return;}el=el.parentNode;}});if(mq){if(mq.addEventListener){mq.addEventListener('change',apply);}else if(mq.addListener){mq.addListener(apply);}}apply();})();`;
+
 const TOTP_QR_SCRIPT = (s: Record<string, string>) =>
   `(function(){var S=${JSON.stringify(s)};function ensureQrcode(box,cb,err){if(typeof qrcode==='function'){cb();return;}var existing=document.querySelector('script[data-totp-qr-lib]');if(existing){existing.addEventListener('load',cb);existing.addEventListener('error',err);return;}var tag=document.createElement('script');tag.src='https://unpkg.com/qrcode-generator@1.4.4/qrcode.js';tag.setAttribute('data-totp-qr-lib','');tag.addEventListener('load',cb);tag.addEventListener('error',err);document.head.appendChild(tag);}function render(){var box=document.querySelector('[data-totp-qr]');if(!box||box.getAttribute('data-totp-rendered'))return;var uri=box.getAttribute('data-totp-uri')||'';if(!uri)return;box.setAttribute('data-totp-rendered','');ensureQrcode(box,function(){try{var q=qrcode(0,'M');q.addData(uri);q.make();box.innerHTML=q.createSvgTag({cellSize:5,margin:2,scalable:true});}catch(e){box.textContent=S.qrFailed;}},function(){box.textContent=S.qrFailed;});}render();document.addEventListener('htmx:afterSwap',render);})();`;
 
@@ -159,7 +169,14 @@ export function Dashboard({
   blockList.forEach((block, index) => {
     if (index === fieldsSlotAt) blockEditorItems.push(<FieldsSlotRow key="fields-slot" t={t} />);
     blockEditorItems.push(
-      <BlockEditorRow key={block.id} block={block} viewers={blockViewers} uploadEnabled={uploadEnabled} t={t} />,
+      <BlockEditorRow
+        key={block.id}
+        block={block}
+        viewers={blockViewers}
+        uploadEnabled={uploadEnabled}
+        t={t}
+        locale={locale}
+      />,
     );
   });
   if (fieldsSlotAt >= blockList.length && section === 'blocks') {
@@ -370,9 +387,7 @@ export function Dashboard({
             >
               {user.bio ?? ''}
             </textarea>
-            <p class="mt-1.5 text-xs leading-relaxed text-muted-foreground">
-              {t('dash.field.bioHint')}
-            </p>
+            <MfmHint t={t} locale={locale} />
           </div>
 
           <div class="mt-4 grid gap-4 sm:grid-cols-2">
@@ -678,7 +693,13 @@ export function Dashboard({
           </p>
 
           <template data-repeater-template>
-            <BlockEditorRow block={null} viewers={blockViewers} uploadEnabled={uploadEnabled} t={t} />
+            <BlockEditorRow
+              block={null}
+              viewers={blockViewers}
+              uploadEnabled={uploadEnabled}
+              t={t}
+              locale={locale}
+            />
           </template>
 
           <div class="mt-5 flex flex-wrap gap-3">
@@ -1222,6 +1243,10 @@ export function Dashboard({
           }),
         }}
       />
+
+      {/* Inert without `[data-mfm-motion-note]`; reveals the notice only while
+          the browser reports reduced motion. */}
+      <script nonce={nonce} dangerouslySetInnerHTML={{ __html: MFM_MOTION_SCRIPT }} />
     </Layout>
   );
 }
@@ -1258,6 +1283,76 @@ function viewerNames(
     .filter((row) => row.block_id === blockId && row.kind === kind && Boolean(row.username))
     .map((row) => row.username as string)
     .join('\n');
+}
+
+/** Misskey Hub's MFM reference, one URL per locale. */
+const MFM_DOCS_URL: Record<Locale, string> = {
+  en: 'https://misskey-hub.net/en/docs/for-users/features/mfm/',
+  zh: 'https://misskey-hub.net/cn/docs/for-users/features/mfm/',
+};
+
+/**
+ * "Animations are paused" notice shown under MFM textareas while the OS or
+ * browser asks for reduced motion. It is server-rendered `hidden` and revealed
+ * by `MFM_MOTION_SCRIPT`, which also remembers a manual dismissal. The outer
+ * element deliberately has **no display utility** so the `hidden` attribute
+ * stays authoritative on its own; the inner flex row owns the layout.
+ */
+function MfmMotionNotice({ t }: { t: TranslateFn }) {
+  return (
+    <div
+      data-mfm-motion-note
+      hidden
+      class="mt-1.5 rounded-xl border border-warning/40 bg-warning/10 px-3 py-2 text-xs leading-relaxed text-foreground/85"
+    >
+      <div class="flex items-start gap-2">
+        <span
+          class="material-symbols-outlined icon-xs mt-px shrink-0 text-warning"
+          aria-hidden="true"
+        >
+          motion_photos_off
+        </span>
+        <p class="flex-1">{t('dash.field.mfmMotionSuppressed')}</p>
+        <button
+          type="button"
+          data-mfm-motion-dismiss
+          class="shrink-0 rounded-full p-0.5 text-muted-foreground transition hover:bg-warning/20 hover:text-foreground"
+          title={t('dash.field.mfmMotionDismiss')}
+          aria-label={t('dash.field.mfmMotionDismiss')}
+        >
+          <span class="material-symbols-outlined icon-xs" aria-hidden="true">
+            close
+          </span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * MFM support hint under the bio / block-body textareas, plus the reduced-motion
+ * notice. The feature list is maintained by Misskey Hub, so the hint links to
+ * it instead of hard-coding a subset here (which is what made the previous
+ * inline list drift out of date).
+ */
+function MfmHint({ t, locale }: { t: TranslateFn; locale: Locale }) {
+  return (
+    <>
+      <p class="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+        {t('dash.field.mfmHintPrefix')}
+        <a
+          class="font-semibold text-primary hover:underline"
+          href={MFM_DOCS_URL[locale]}
+          rel="noopener noreferrer"
+          target="_blank"
+        >
+          MFM
+        </a>
+        {t('dash.field.mfmHintSuffix')}
+      </p>
+      <MfmMotionNotice t={t} />
+    </>
+  );
 }
 
 /**
@@ -1338,8 +1433,9 @@ function BlockEditorRow(props: {
   /** R2 uploads exist on this deployment; offers the in-row "Add image" button. */
   uploadEnabled: boolean;
   t: TranslateFn;
+  locale: Locale;
 }) {
-  const { block, viewers, uploadEnabled, t } = props;
+  const { block, viewers, uploadEnabled, t, locale } = props;
   const kind: 'text' | 'gallery' =
     block?.kind === 'text' || block?.kind === 'gallery' ? block.kind : 'text';
   const visibility = editorVisibility(block);
@@ -1618,9 +1714,7 @@ function BlockEditorRow(props: {
         >
           {block?.body ?? ''}
         </textarea>
-        <p class="mt-1.5 text-xs leading-relaxed text-muted-foreground">
-          {t('dash.field.bioHint')}
-        </p>
+        <MfmHint t={t} locale={locale} />
       </div>
 
       <div data-block-gallery class="mt-2">

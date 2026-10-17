@@ -83,8 +83,11 @@ export const en = {
   'dash.useGravatar': 'Use Gravatar',
   'dash.gravatarHint': 'Fill in the avatar linked to your email address.',
   'dash.field.bio': 'Bio',
-  'dash.field.bioHint':
-    'Supports MFM: **bold**, *italic*, ~~strike~~, `code`, > quote, [text](https://…), @handle, #tag, $[tada animation], $[color.red text].',
+  'dash.field.mfmHintPrefix': 'Supports ',
+  'dash.field.mfmHintSuffix': ' syntax — see the official reference for the full list.',
+  'dash.field.mfmMotionSuppressed':
+    'Your system asks for reduced motion, so MFM animations are paused.',
+  'dash.field.mfmMotionDismiss': 'Dismiss',
   'dash.field.theme': 'Theme',
   'dash.field.visibility': 'Visibility',
   'dash.viewProfile': 'View profile',

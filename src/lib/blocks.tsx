@@ -31,7 +31,7 @@ import {
 import { renderMfm } from './mfm';
 import { isStoredPath } from './storage';
 import { isSafeUrl } from './validate';
-import type { TranslateFn } from '../i18n';
+import type { Locale, TranslateFn } from '../i18n';
 
 /**
  * Parses a gallery block's stored `items` (a JSON array string) into the list
@@ -114,8 +114,10 @@ export function ProfileBlockCard(props: {
   isOwner: boolean;
   viewers?: ReadonlyMap<string, BlockViewerLists>;
   t: TranslateFn;
+  /** MFM `$[unixtime]` renders locale-formatted dates, so the viewer's locale is threaded through. */
+  locale?: Locale;
 }) {
-  const { row, isOwner, viewers, t } = props;
+  const { row, isOwner, viewers, t, locale = 'en' } = props;
   const kind = blockKindOf(row);
   if (kind === null) return null;
 
@@ -127,7 +129,7 @@ export function ProfileBlockCard(props: {
           <div
             class="mfm-body mt-1 break-words text-sm leading-relaxed text-foreground/85"
             data-block-body
-            dangerouslySetInnerHTML={{ __html: renderMfm(row.body) }}
+            dangerouslySetInnerHTML={{ __html: renderMfm(row.body, locale) }}
           />
         ) : null
       ) : (

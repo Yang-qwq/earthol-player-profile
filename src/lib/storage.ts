@@ -155,10 +155,19 @@ export async function storeGalleryImage(
   return { key, path: `${STORAGE_PATH_PREFIX}${key}`, contentType: storedType };
 }
 
-/** The owner id embedded in a stored path (`avatars/<userId>/…`), or null. */
+/**
+ * The owner id embedded in a stored path, or null.
+ *
+ * The public path is `/files/<namespace>/<userId>/<token>.<ext>`, so after
+ * stripping the `/files/` prefix the **second** segment is the owner — the
+ * first is the namespace (`avatars`/`gallery`). (Reading the first segment
+ * here returned `avatars`/`gallery`, which made the profile route reject every
+ * uploaded avatar as an invalid URL and made `deleteStoredImage` refuse every
+ * cross-checked delete.)
+ */
 export function storedPathOwner(path: string | null | undefined): string | null {
   if (!isStoredPath(path)) return null;
-  return path.slice(STORAGE_PATH_PREFIX.length).split('/')[0] ?? null;
+  return path.slice(STORAGE_PATH_PREFIX.length).split('/')[1] ?? null;
 }
 
 /**

@@ -516,177 +516,327 @@ textarea.field {
     sans-serif;
   font-style: normal;
 }
+.mfm-ruby rt {
+  font-size: 0.55em;
+  letter-spacing: 0.02em;
+}
+.mfm-unixtime {
+  font-variant-numeric: tabular-nums;
+}
 .mfm-search {
+  display: flex;
   margin-top: 0.6em;
 }
-.mfm-search::before {
-  content: '\1F50D';
-  margin-right: 0.3em;
+.mfm-search-input {
+  width: min(100%, 24rem);
+  border: 1px solid hsl(var(--border));
+  border-radius: 9999px;
+  background-color: hsl(var(--muted));
+  padding: 0.35em 0.9em;
+  font-size: 0.9em;
+  color: inherit;
+}
+.mfm-search-input:focus {
+  outline: 2px solid hsl(var(--primary) / 0.5);
+  outline-offset: 1px;
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  .mfm-anim {
-    display: inline-block;
-  }
-  .mfm-anim-tada {
-    animation: mfm-tada 1s infinite both;
-  }
-  .mfm-anim-jelly {
-    animation: mfm-jelly 1s infinite both;
-  }
-  .mfm-anim-spin {
-    animation: mfm-spin 1.5s linear infinite both;
-  }
-  .mfm-anim-jump {
-    animation: mfm-jump 1s linear infinite both;
-  }
-  .mfm-anim-bounce {
-    animation: mfm-bounce 1s linear infinite both;
-  }
-  .mfm-anim-blink {
-    animation: mfm-blink 1s linear infinite both;
-  }
-  .mfm-anim-twinkle {
-    animation: mfm-twinkle 1s linear infinite both;
-  }
-  .mfm-anim-shake {
-    animation: mfm-shake 1s linear infinite both;
-  }
-  .mfm-anim-flicker {
-    animation: mfm-flicker 1.5s linear infinite both;
-  }
-  .mfm-anim-rainbow {
-    animation: mfm-rainbow 1s linear infinite both;
-  }
+/* Transform-only MFM functions (flip / rotate / scale / position). Each one is
+   its own wrapper element, so nested transforms compose instead of clobbering
+   each other. */
+.mfm-flip-h {
+  display: inline-block;
+  transform: scaleX(-1);
+}
+.mfm-flip-v {
+  display: inline-block;
+  transform: scaleY(-1);
+}
+.mfm-flip-hv {
+  display: inline-block;
+  transform: scale(-1, -1);
+}
+.mfm-border {
+  display: inline-block;
+}
 
-  @keyframes mfm-tada {
-    0% {
-      transform: scale(1) rotate(0);
-    }
-    10%,
-    20% {
-      transform: scale(0.9) rotate(-3deg);
-    }
-    30%,
-    50%,
-    70%,
-    90% {
-      transform: scale(1.1) rotate(3deg);
-    }
-    40%,
-    60%,
-    80% {
-      transform: scale(1.1) rotate(-3deg);
-    }
-    100% {
-      transform: scale(1) rotate(0);
-    }
+/* $[font.serif|monospace|cursive|fantasy …] */
+.mfm-font-serif {
+  font-family: ui-serif, Georgia, 'Times New Roman', serif;
+}
+.mfm-font-monospace {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
+}
+.mfm-font-cursive {
+  font-family: 'Comic Sans MS', 'Brush Script MT', cursive;
+}
+.mfm-font-fantasy {
+  font-family: Papyrus, Impact, fantasy;
+}
+
+/* $[blur …] — revealed on hover/focus, like Misskey. `display: inline-block`
+   matters: WebKit ignores `filter` on non-replaced inline boxes, so without it
+   the blur simply never appears in Safari. */
+.mfm-blur {
+  display: inline-block;
+  filter: blur(4px);
+  transition: filter 0.2s ease;
+}
+.mfm-blur:hover,
+.mfm-blur:focus-within {
+  filter: none;
+}
+
+/* MFM animations are defined unconditionally and disabled by the single
+   `prefers-reduced-motion: reduce` override at the end of this block. The
+   opt-out form is deliberate: gating on `(prefers-reduced-motion:
+   no-preference)` would also switch them off in browsers that do not
+   understand the feature at all, and those users would get neither the
+   animation nor the dashboard notice. */
+.mfm-anim {
+  display: inline-block;
+}
+.mfm-anim-tada {
+  animation: mfm-tada 1s infinite both;
+}
+.mfm-anim-jelly {
+  animation: mfm-jelly 1s infinite both;
+}
+.mfm-anim-spin {
+  animation: mfm-spin 1.5s linear infinite both;
+}
+.mfm-anim-spin-x {
+  animation: mfm-spin-x 1.5s linear infinite both;
+}
+.mfm-anim-spin-y {
+  animation: mfm-spin-y 1.5s linear infinite both;
+}
+.mfm-anim-jump {
+  animation: mfm-jump 1s linear infinite both;
+}
+.mfm-anim-bounce {
+  animation: mfm-bounce 1s linear infinite both;
+}
+.mfm-anim-blink {
+  animation: mfm-blink 1s linear infinite both;
+}
+.mfm-anim-twinkle {
+  animation: mfm-twinkle 1s linear infinite both;
+}
+.mfm-anim-shake {
+  animation: mfm-shake 1s linear infinite both;
+}
+.mfm-anim-twitch {
+  animation: mfm-twitch 0.5s linear infinite both;
+}
+.mfm-anim-sparkle {
+  animation: mfm-sparkle 2s ease-in-out infinite both;
+}
+.mfm-anim-flicker {
+  animation: mfm-flicker 1.5s linear infinite both;
+}
+.mfm-anim-rainbow {
+  animation: mfm-rainbow 1s linear infinite both;
+}
+
+@keyframes mfm-tada {
+  0% {
+    transform: scale(1) rotate(0);
   }
-  @keyframes mfm-jelly {
-    0%,
-    100% {
-      transform: scale(1, 1);
-    }
-    25% {
-      transform: scale(0.8, 1.1);
-    }
-    50% {
-      transform: scale(1.1, 0.8);
-    }
-    75% {
-      transform: scale(0.9, 1.05);
-    }
+  10%,
+  20% {
+    transform: scale(0.9) rotate(-3deg);
   }
-  @keyframes mfm-spin {
-    0% {
-      transform: rotate(0);
-    }
-    100% {
-      transform: rotate(360deg);
-    }
+  30%,
+  50%,
+  70%,
+  90% {
+    transform: scale(1.1) rotate(3deg);
   }
-  @keyframes mfm-jump {
-    0%,
-    100% {
-      transform: translateY(0);
-    }
-    25% {
-      transform: translateY(-8px);
-    }
-    50% {
-      transform: translateY(0);
-    }
-    75% {
-      transform: translateY(-4px);
-    }
+  40%,
+  60%,
+  80% {
+    transform: scale(1.1) rotate(-3deg);
   }
-  @keyframes mfm-bounce {
-    0%,
-    100% {
-      transform: translateY(0) scale(1, 1);
-    }
-    25% {
-      transform: translateY(-6px) scale(1, 1);
-    }
-    50% {
-      transform: translateY(0) scale(1.1, 0.9);
-    }
+  100% {
+    transform: scale(1) rotate(0);
   }
-  @keyframes mfm-blink {
-    0%,
-    100% {
-      opacity: 1;
-    }
-    50% {
-      opacity: 0.15;
-    }
+}
+@keyframes mfm-jelly {
+  0%,
+  100% {
+    transform: scale(1, 1);
   }
-  @keyframes mfm-twinkle {
-    0%,
-    100% {
-      opacity: 1;
-      transform: scale(1);
-    }
-    50% {
-      opacity: 0.6;
-      transform: scale(1.15);
-    }
+  25% {
+    transform: scale(0.8, 1.1);
   }
-  @keyframes mfm-shake {
-    0%,
-    100% {
-      transform: translateX(0);
-    }
-    20%,
-    60% {
-      transform: translateX(-3px);
-    }
-    40%,
-    80% {
-      transform: translateX(3px);
-    }
+  50% {
+    transform: scale(1.1, 0.8);
   }
-  @keyframes mfm-flicker {
-    0%,
-    100% {
-      opacity: 1;
-    }
-    45% {
-      opacity: 0.35;
-    }
-    55% {
-      opacity: 0.9;
-    }
-    70% {
-      opacity: 0.5;
-    }
+  75% {
+    transform: scale(0.9, 1.05);
   }
-  @keyframes mfm-rainbow {
-    0% {
-      filter: hue-rotate(0deg);
-    }
-    100% {
-      filter: hue-rotate(360deg);
-    }
+}
+@keyframes mfm-spin {
+  0% {
+    transform: rotate(0);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+@keyframes mfm-spin-x {
+  0% {
+    transform: rotateX(0);
+  }
+  100% {
+    transform: rotateX(360deg);
+  }
+}
+@keyframes mfm-spin-y {
+  0% {
+    transform: rotateY(0);
+  }
+  100% {
+    transform: rotateY(360deg);
+  }
+}
+@keyframes mfm-jump {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  25% {
+    transform: translateY(-8px);
+  }
+  50% {
+    transform: translateY(0);
+  }
+  75% {
+    transform: translateY(-4px);
+  }
+}
+@keyframes mfm-bounce {
+  0%,
+  100% {
+    transform: translateY(0) scale(1, 1);
+  }
+  25% {
+    transform: translateY(-6px) scale(1, 1);
+  }
+  50% {
+    transform: translateY(0) scale(1.1, 0.9);
+  }
+}
+@keyframes mfm-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.15;
+  }
+}
+@keyframes mfm-twinkle {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.6;
+    transform: scale(1.15);
+  }
+}
+@keyframes mfm-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20%,
+  60% {
+    transform: translateX(-3px);
+  }
+  40%,
+  80% {
+    transform: translateX(3px);
+  }
+}
+@keyframes mfm-twitch {
+  0%,
+  100% {
+    transform: translate(0, 0) rotate(0);
+  }
+  10% {
+    transform: translate(-2px, 1px) rotate(-1deg);
+  }
+  20% {
+    transform: translate(2px, -1px) rotate(1deg);
+  }
+  30% {
+    transform: translate(-2px, -1px) rotate(-1deg);
+  }
+  40% {
+    transform: translate(2px, 1px) rotate(1deg);
+  }
+  50% {
+    transform: translate(-1px, 1px) rotate(-1deg);
+  }
+  60% {
+    transform: translate(1px, -1px) rotate(1deg);
+  }
+  70% {
+    transform: translate(-1px, -1px) rotate(-1deg);
+  }
+  80% {
+    transform: translate(1px, 1px) rotate(1deg);
+  }
+  90% {
+    transform: translate(-1px, 0) rotate(0);
+  }
+}
+@keyframes mfm-sparkle {
+  0%,
+  100% {
+    filter: brightness(1) saturate(1);
+  }
+  50% {
+    filter: brightness(1.9) saturate(1.5);
+  }
+}
+@keyframes mfm-flicker {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  45% {
+    opacity: 0.35;
+  }
+  55% {
+    opacity: 0.9;
+  }
+  70% {
+    opacity: 0.5;
+  }
+}
+@keyframes mfm-rainbow {
+  0% {
+    filter: hue-rotate(0deg);
+  }
+  100% {
+    filter: hue-rotate(360deg);
+  }
+}
+
+/* Respect the OS/browser "reduce motion" preference. Keep this as the only
+   switch for MFM animation: the dashboard's `MfmMotionNotice` checks the same
+   media query and shows the dismissible "animations are paused" hint, so the
+   CSS and the notice must always agree. */
+@media (prefers-reduced-motion: reduce) {
+  .mfm-anim {
+    animation: none !important;
+  }
+  .mfm-blur {
+    transition: none;
   }
 }

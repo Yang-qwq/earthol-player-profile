@@ -261,6 +261,7 @@ export function Profile({
         isOwner={Boolean(isOwner)}
         viewers={blockViewers}
         t={t}
+        locale={locale}
       />,
     );
   });
@@ -411,7 +412,7 @@ export function Profile({
             {user.bio ? (
               <div
                 class="mfm-body mt-5 leading-relaxed text-foreground/85"
-                dangerouslySetInnerHTML={{ __html: renderMfm(user.bio) }}
+                dangerouslySetInnerHTML={{ __html: renderMfm(user.bio, locale) }}
               />
             ) : null}
 
