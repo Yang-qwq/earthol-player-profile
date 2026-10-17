@@ -35,6 +35,7 @@ import {
 } from '../db/queries';
 import { requireAuth } from '../middleware/auth';
 import { invalidateProfiles } from '../lib/profile-cache';
+import { parseGalleryItems } from '../lib/blocks';
 import { isBlockRelation, isBlockVisibility } from '../lib/audience';
 import { gravatarAvatarUrl } from '../lib/gravatar';
 import { githubConfigured } from '../lib/oauth-github';
@@ -46,8 +47,12 @@ import {
   deleteStoredImage,
   isStoredPath,
   MAX_AVATAR_BYTES,
+  MAX_GALLERY_BYTES,
+  STORAGE_PATH_PREFIX,
+  STORAGE_PREFIXES,
   storageEnabled,
   storedPathOwner,
+  storeGalleryImage,
   storeImage,
 } from '../lib/storage';
 import {
@@ -132,6 +137,8 @@ function errorMessage(code: string | undefined, t: TranslateFn): string | undefi
       return t('dash.err.fileTooLarge', {
         max: String(MAX_AVATAR_BYTES / (1024 * 1024)),
       });
+    case 'gallery_file_too_large':
+      return t('dash.err.galleryFileTooLarge', { max: String(MAX_GALLERY_BYTES / (1024 * 1024)) });
     case 'invalid_file_type':
       return t('dash.err.invalidFileType');
     default:
@@ -330,6 +337,7 @@ dashboardRoutes.post('/dashboard/avatar/upload', async (c) => {
     ownerId: user.id,
     file: body.file,
     maxBytes: MAX_AVATAR_BYTES,
+    prefix: STORAGE_PREFIXES.avatars,
   });
   if ('error' in result) return c.redirect(`/dashboard?error=${result.error}`);
 
@@ -354,6 +362,41 @@ dashboardRoutes.post('/dashboard/avatar/upload', async (c) => {
   await invalidateProfiles(c.env.KV, [user.username]);
 
   return c.redirect('/dashboard?saved=avatar');
+});
+
+/**
+ * Uploads one image into the optional R2 binding for a gallery block.
+ * Returns JSON `{ url }` (same-origin `/files/...`) so the Blocks editor's
+ * client script can append the URL to the row's items textarea — unlike the
+ * avatar upload this endpoint does not touch any profile state. The input is
+ * re-encoded to WebP server-side when possible (src/lib/image.ts); undecodable
+ * files are stored verbatim. Served back via `/files/*` and deduplicated
+ * against existing items by the editor, not here.
+ */
+dashboardRoutes.post('/dashboard/gallery-image/upload', async (c) => {
+  const user = c.get('user')!;
+  if (!storageEnabled(c.env)) return c.json({ error: 'unavailable' }, 503);
+  if (!user.username) return c.json({ error: 'unavailable' }, 503);
+
+  const ip = clientIp(c.req.raw.headers);
+  const [ipLimit, userLimit] = await Promise.all([
+    rateLimit(c.env.KV, `upload:ip:${ip}`, 20, 3600),
+    rateLimit(c.env.KV, `upload:user:${user.id}`, 20, 3600),
+  ]);
+  if (!ipLimit.allowed || !userLimit.allowed) {
+    return c.json({ error: 'rate_limited' }, 429);
+  }
+
+  const body = await c.req.parseBody();
+  const result = await storeGalleryImage(c.env, { ownerId: user.id, file: body.file });
+  if ('error' in result) {
+    // Mirror the avatar endpoint's error→status mapping so the editor can
+    // surface a specific message.
+    const status = result.error === 'unavailable' ? 503 : 400;
+    return c.json({ error: result.error }, status);
+  }
+
+  return c.json({ url: result.path }, 200, { 'Cache-Control': 'no-store' });
 });
 
 dashboardRoutes.post('/dashboard/fields', async (c) => {
@@ -401,6 +444,11 @@ dashboardRoutes.post('/dashboard/blocks', async (c) => {
   const visibleUntilRaw = toArray(body.visible_until);
   const allowUsersRaw = toArray(body.allow_users);
   const denyUsersRaw = toArray(body.deny_users);
+  // Read the previous list up front so the block replace below can delete the
+  // R2 uploads it orphans (replace-on-submit, same pattern as the avatar
+  // upload's cleanup). Only gallery items matter: external URLs own their
+  // storage, and non-gallery blocks carry no uploads.
+  const previousBlocks = await listProfileBlocks(c.env.DB, user.id);
 
   const splitLines = (value: string): string[] =>
     value
@@ -606,6 +654,42 @@ dashboardRoutes.post('/dashboard/blocks', async (c) => {
   // clamps lengths and drops anything that still fails the CHECK constraints, so
   // a hostile post can only ever produce at most `maxBlocks` in-range rows.
   await replaceProfileBlocks(c.env.DB, user.id, seen);
+
+  // Best-effort cleanup of the uploads this replace orphans: every stored
+  // gallery image (`/files/gallery/<userId>/…`) that was referenced by a
+  // previous gallery block but is not referenced by any submitted one. Runs
+  // as `waitUntil` like the profile-cache invalidation — a failed delete
+  // must never turn a successful save into an error (an orphan is a cost
+  // issue, not a correctness one).
+  const submittedUrls = new Set<string>();
+  for (const block of seen) {
+    if (block.kind !== 'gallery' || !block.items) continue;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(block.items);
+    } catch {
+      continue;
+    }
+    if (Array.isArray(parsed)) {
+      for (const entry of parsed) {
+        if (typeof entry === 'string') submittedUrls.add(entry.trim());
+      }
+    }
+  }
+  const orphaned = new Set<string>();
+  for (const block of previousBlocks) {
+    if (block.kind !== 'gallery') continue;
+    for (const item of parseGalleryItems(block.items)) {
+      const url = item.trim();
+      if (url.startsWith(STORAGE_PATH_PREFIX) && !submittedUrls.has(url)) orphaned.add(url);
+    }
+  }
+  if (orphaned.size > 0) {
+    c.executionCtx.waitUntil(
+      Promise.all([...orphaned].map((path) => deleteStoredImage(c.env, path, user.id))),
+    );
+  }
+
   // The key/value card's position, clamped to the blocks that were stored.
   await setProfileLayout(c.env.DB, user.id, Math.min(fieldsPosition ?? 0, seen.length));
   // Profile mutation: the cached anonymous profile HTML embeds blocks, so it

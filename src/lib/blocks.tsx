@@ -29,6 +29,7 @@ import {
   type BlockViewerLists,
 } from './audience';
 import { renderMfm } from './mfm';
+import { isStoredPath } from './storage';
 import { isSafeUrl } from './validate';
 import type { TranslateFn } from '../i18n';
 
@@ -137,14 +138,24 @@ export function ProfileBlockCard(props: {
   );
 }
 
-/** Lays out a gallery's safe images; unsafe items were dropped upstream. */
+/**
+ * Lays out a gallery's renderable images. An item is emitted only when it is
+ * either an absolute http(s) URL (`isSafeUrl`) or one of this app's own
+ * stored paths (`isStoredPath` — the strict `/files/(avatars|gallery)/…` key
+ * regex, so arbitrary relative or protocol-relative paths still fail closed).
+ * `isSafeUrl` alone rejects same-origin relative paths (`new URL` throws
+ * without a base), which would have made R2 gallery uploads invisible; the
+ * avatar column has the same shape and is rendered without any URL check, so
+ * trusting the exact stored-path form is consistent with the app's model
+ * (only this Worker's own writes produce such paths).
+ */
 function GalleryGrid(props: { items: readonly string[] }) {
   const { items } = props;
   if (items.length === 0) return null;
   return (
     <div class="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-3" data-block-gallery>
       {items.map((item, index) =>
-        isSafeUrl(item) ? (
+        isSafeUrl(item) || isStoredPath(item) ? (
           <img
             key={index}
             src={item}

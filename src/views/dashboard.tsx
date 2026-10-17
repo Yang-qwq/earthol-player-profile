@@ -14,7 +14,7 @@ import type {
 } from '../db/types';
 import { THEMES, VISIBILITIES } from '../lib/themes';
 import { tagChipClasses } from '../lib/tags';
-import { MAX_AVATAR_BYTES } from '../lib/storage';
+import { MAX_AVATAR_BYTES, MAX_GALLERY_BYTES } from '../lib/storage';
 import { BLOCK_LIMITS } from '../db/queries';
 import {
   isBlockVisibility,
@@ -27,6 +27,20 @@ import type { BlockVisibility } from '../db/types';
 import { audienceOptions, blockKindLabel, parseGalleryItems } from '../lib/blocks';
 import { DASHBOARD_SECTIONS, type DashboardSection } from '../lib/dashboard-nav';
 import type { Locale, MessageKey, TranslateFn } from '../i18n';
+
+/**
+ * Gallery image upload (dashboard Blocks editor). Clicking the per-row
+ * "Add image" button opens the file picker; once a file is chosen it is
+ * POSTed to /dashboard/gallery-image/upload (with the row's CSRF token),
+ * and on success the returned same-origin URL is appended to the row's
+ * items textarea — the field that is actually submitted, so the row saves
+ * normally through the plain form POST. The textarea stays the source of
+ * truth: uploads are an input convenience, never a requirement (no-JS and
+ * external-URL workflows keep working unchanged). Delegated; no eval, so it
+ * stays CSP-compatible.
+ */
+const GALLERY_UPLOAD_SCRIPT = (s: Record<string, string>) =>
+  `(var S=${JSON.stringify(s)});(function(){function msg(form,code){var map={unavailable:'unavailable',invalid_file:'invalid_file',file_too_large:'file_too_large',gallery_file_too_large:'gallery_file_too_large',invalid_file_type:'invalid_file_type',rate_limited:'rate_limited',network_error:'network_error'};var el=form?form.querySelector('[data-block-upload-error]'):null;if(!el)return;el.hidden=false;el.textContent=S[map[code]||'generic']||S.generic||code;}function reset(row){var btn=row?row.querySelector('[data-gallery-upload]'):null;if(btn)btn.disabled=false;}function upload(file,row){var btn=row?row.querySelector('[data-gallery-upload]'):null;if(btn)btn.disabled=true;var form=row?row.closest('form'):null;var csrf=form?form.querySelector('input[name=_csrf]'):null;var fd=new FormData();fd.append('file',file);if(csrf)fd.append('_csrf',csrf.value);fetch('/dashboard/gallery-image/upload',{method:'POST',body:fd,credentials:'same-origin'}).then(function(r){return r.json().then(function(j){return{ok:r.ok,body:j};}).catch(function(){return{ok:r.ok,body:{}};});}).then(function(res){if(res.ok&&res.body&&res.body.url){var ta=row?row.querySelector('textarea[name=items]'):null;if(ta){var cur=ta.value.replace(/[\\r\\n]+$/,'');ta.value=(cur?cur+String.fromCharCode(10):'')+res.body.url;}}else{msg(row?row.closest('form'):null,res.body&&res.body.error);reset(row);}}).catch(function(){msg(row?row.closest('form'):null,'network_error');reset(row);});}document.addEventListener('click',function(ev){var t=ev.target;while(t&&t!==document.body){if(t.hasAttribute&&t.hasAttribute('data-gallery-upload')){ev.preventDefault();var row=t.closest('[data-block-row]');if(!row)return;var file=row.querySelector('[data-gallery-file]');if(file){file.value='';file.click();}return;}t=t.parentNode;}});document.addEventListener('change',function(ev){var t=ev.target;if(!t||!t.hasAttribute||!t.hasAttribute('data-gallery-file'))return;if(!t.files||!t.files.length)return;var row=t.closest('[data-block-row]');if(!row)return;upload(t.files[0],row);});})();`;
 
 /**
  * Renders the otpauth:// provisioning URI as a QR code for a pending TOTP
@@ -126,7 +140,7 @@ export function Dashboard({
   blockList.forEach((block, index) => {
     if (index === fieldsSlotAt) blockEditorItems.push(<FieldsSlotRow key="fields-slot" t={t} />);
     blockEditorItems.push(
-      <BlockEditorRow key={block.id} block={block} viewers={blockViewers} t={t} />,
+      <BlockEditorRow key={block.id} block={block} viewers={blockViewers} uploadEnabled={uploadEnabled} t={t} />,
     );
   });
   if (fieldsSlotAt >= blockList.length && section === 'blocks') {
@@ -644,7 +658,7 @@ export function Dashboard({
           </p>
 
           <template data-repeater-template>
-            <BlockEditorRow block={null} viewers={blockViewers} t={t} />
+            <BlockEditorRow block={null} viewers={blockViewers} uploadEnabled={uploadEnabled} t={t} />
           </template>
 
           <div class="mt-5 flex flex-wrap gap-3">
@@ -1162,6 +1176,28 @@ export function Dashboard({
           __html: TOTP_QR_SCRIPT({ qrFailed: t('dash.account.totpQrFailed') }),
         }}
       />
+
+      {/* Gallery uploads are inert without the button, so this always ships;
+          it only activates on rows rendered with uploadEnabled. */}
+      <script
+        nonce={nonce}
+        dangerouslySetInnerHTML={{
+          __html: GALLERY_UPLOAD_SCRIPT({
+            generic: t('dash.err.invalidFile'),
+            unavailable: t('dash.err.storageUnavailable'),
+            invalid_file: t('dash.err.invalidFile'),
+            file_too_large: t('dash.err.fileTooLarge', {
+              max: String(MAX_AVATAR_BYTES / (1024 * 1024)),
+            }),
+            gallery_file_too_large: t('dash.err.galleryFileTooLarge', {
+              max: String(MAX_GALLERY_BYTES / (1024 * 1024)),
+            }),
+            invalid_file_type: t('dash.err.invalidFileType'),
+            rate_limited: t('dash.err.rateLimited'),
+            network_error: t('dash.err.networkError'),
+          }),
+        }}
+      />
     </Layout>
   );
 }
@@ -1275,9 +1311,11 @@ function FieldsSlotRow({ t }: { t: TranslateFn }) {
 function BlockEditorRow(props: {
   block: ProfileBlockRow | null;
   viewers?: readonly BlockViewerRow[];
+  /** R2 uploads exist on this deployment; offers the in-row "Add image" button. */
+  uploadEnabled: boolean;
   t: TranslateFn;
 }) {
-  const { block, viewers, t } = props;
+  const { block, viewers, uploadEnabled, t } = props;
   const kind: 'text' | 'gallery' =
     block?.kind === 'text' || block?.kind === 'gallery' ? block.kind : 'text';
   const visibility = editorVisibility(block);
@@ -1571,6 +1609,35 @@ function BlockEditorRow(props: {
         >
           {items}
         </textarea>
+        {uploadEnabled ? (
+          <div class="mt-2 flex flex-wrap items-center gap-2">
+            {/* The hidden picker is driven by the button via the page script
+                (GALLERY_UPLOAD_SCRIPT): click → choose file → upload → the
+                returned same-origin URL is appended to the textarea above, so
+                the row still submits through the plain form POST. */}
+            <input
+              type="file"
+              data-gallery-file
+              accept="image/png,image/jpeg,image/gif,image/webp"
+              style="display:none"
+              aria-hidden="true"
+            />
+            <button
+              type="button"
+              data-gallery-upload
+              class="btn-outline"
+              title={t('dash.block.uploadHint', {
+                max: String(MAX_GALLERY_BYTES / (1024 * 1024)),
+              })}
+            >
+              <span class="material-symbols-outlined icon-sm" aria-hidden="true">
+                image
+              </span>
+              {t('dash.block.addImage')}
+            </button>
+            <span data-block-upload-error class="text-xs text-danger" role="alert" hidden></span>
+          </div>
+        ) : null}
       </div>
     </div>
   );

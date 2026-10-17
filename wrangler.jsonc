@@ -23,17 +23,26 @@
       "binding": "KV"
     }
   ],
-  // Optional R2 object storage: uncomment to enable avatar uploads in the
-  // dashboard. The code detects the binding at runtime and hides/disables the
-  // upload feature when it is absent, so leaving this commented keeps the app
-  // fully functional without R2. `bucket_name` may be any name — Wrangler
-  // auto-provisions it (locally and on deploy), or point it at an existing one.
+  // Optional R2 object storage: uncomment to enable avatar + gallery-image
+  // uploads in the dashboard. The code detects the binding at runtime and
+  // hides/disables the upload feature when it is absent, so leaving this
+  // commented keeps the app fully functional without R2 (gallery blocks keep
+  // working with external image URLs). `bucket_name` may be any name —
+  // Wrangler auto-provisions it (locally and on deploy), or point it at an
+  // existing one.
   // "r2_buckets": [
   //   {
   //     "binding": "R2",
   //     "bucket_name": "earthol-player-profile-r2"
   //   }
   // ],
+  // Optional Cloudflare Images binding: uncomment to re-encode gallery
+  // uploads to WebP server-side before they are stored in R2. Independent of
+  // the R2 binding — without R2 uploads stay disabled; without Images the
+  // original bytes are stored unchanged.
+  // "images": {
+  //   "binding": "IMAGES"
+  // },
   "env": {
     "production": {
       "name": "earthol-player-profile-production",
@@ -55,7 +64,12 @@
       //     "binding": "R2",
       //     "bucket_name": "earthol-player-profile-r2"
       //   }
-      // ]
+      // ],
+      // (Images is not inherited into named environments — uncomment here
+      // too, together with the top-level block.)
+      // "images": {
+      //   "binding": "IMAGES"
+      // }
     }
   }
 }

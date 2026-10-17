@@ -16,6 +16,14 @@ export interface Env {
    */
   R2?: R2Bucket;
 
+  /**
+   * Optional Cloudflare Images binding. When bound, gallery uploads are
+   * re-encoded to WebP server-side (src/lib/image.ts) before storage. Absent
+   * = uploads still work, the original bytes are stored unchanged. Independent
+   * of R2: R2 stores the bytes, Images only optimises them.
+   */
+  IMAGES?: ImagesBinding;
+
   APP_NAME?: string;
   APP_URL?: string;
 
