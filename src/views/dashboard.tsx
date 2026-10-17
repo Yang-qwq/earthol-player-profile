@@ -265,7 +265,7 @@ export function Dashboard({
             <label class="label" for="avatar_url">
               {t('dash.field.avatar')}
             </label>
-            <div class="flex items-center gap-2" data-gravatar>
+            <div class="flex flex-col gap-2 sm:flex-row sm:items-center" data-gravatar>
               <input
                 id="avatar_url"
                 name="avatar_url"
