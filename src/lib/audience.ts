@@ -30,7 +30,12 @@
  *      - `minFollowDays` / `minAccountAgeDays` — age gates;
  *      - `visibleFrom` / `visibleUntil` — a time window.
  *    Everything is ANDed; there is no top-level OR and no negation beyond the
- *    deny/exclude lists. Each list is an any-of test internally.
+ *    deny/exclude lists. Each list is an any-of test internally. The missing OR
+ *    is a deliberate, recorded trade-off (2026-10): OR under this model needs
+ *    grouped/nested conditions, a new storage shape, and a much bigger editor,
+ *    owners can approximate it today with duplicate blocks (one per branch) or
+ *    the explicit allow list, and no user demand has surfaced — out of scope
+ *    short-term; do not add casually.
  *
  * Where a condition (or the audience itself) is answered differently by
  * different viewers, `isViewerIndependent` is false, which keeps the block out
