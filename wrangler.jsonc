@@ -67,9 +67,9 @@
       // ],
       // (Images is not inherited into named environments — uncomment here
       // too, together with the top-level block.)
-      // "images": {
-      //   "binding": "IMAGES"
-      // }
+      "images": {
+        "binding": "IMAGES"
+      }
     }
   }
 }
