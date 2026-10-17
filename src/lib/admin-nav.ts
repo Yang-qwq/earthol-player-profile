@@ -15,7 +15,8 @@ export type AdminSection =
   | 'landing'
   | 'reserved'
   | 'tags'
-  | 'users';
+  | 'users'
+  | 'moderation';
 
 /** URL of each section's page. */
 export const ADMIN_SECTION_PATH: Record<AdminSection, string> = {
@@ -28,6 +29,7 @@ export const ADMIN_SECTION_PATH: Record<AdminSection, string> = {
   reserved: '/admin/reserved',
   tags: '/admin/tags',
   users: '/admin/users',
+  moderation: '/admin/moderation',
 };
 
 /** Sidebar / overview entries in display order. */
@@ -46,4 +48,5 @@ export const ADMIN_SECTIONS: readonly {
   { section: 'reserved', path: '/admin/reserved', key: 'admin.nav.reserved', icon: 'block' },
   { section: 'tags', path: '/admin/tags', key: 'admin.nav.tags', icon: 'sell' },
   { section: 'users', path: '/admin/users', key: 'admin.nav.users', icon: 'group' },
+  { section: 'moderation', path: '/admin/moderation', key: 'admin.nav.moderation', icon: 'gavel' },
 ];

@@ -7,7 +7,7 @@ import type { MiddlewareHandler } from 'hono';
 import type { AppContext } from '../types';
 import { ensureCsrfCookie, verifyCsrf } from '../lib/csrf';
 import { getSessionToken, readSession } from '../lib/session';
-import { getUserById } from '../db/queries';
+import { getActiveBan, getUserById } from '../db/queries';
 import { isAdminUser } from '../lib/admin';
 
 const UNSAFE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
@@ -15,6 +15,7 @@ const UNSAFE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 export const loadUser: MiddlewareHandler<AppContext> = async (c, next) => {
   c.set('csrfToken', ensureCsrfCookie(c));
   c.set('isAdmin', false);
+  c.set('isBanned', false);
 
   const token = getSessionToken(c);
   if (token) {
@@ -24,6 +25,11 @@ export const loadUser: MiddlewareHandler<AppContext> = async (c, next) => {
       if (user) {
         c.set('user', user);
         c.set('sessionToken', token);
+        // Authoritative D1 check: a banned account keeps its session data (the
+        // ban gate below handles it), but every auth-gated route must know.
+        const ban = await getActiveBan(c.env.DB, user.id);
+        c.set('ban', ban);
+        c.set('isBanned', Boolean(ban));
         // Also lazily promotes ADMIN_EMAILS bootstrap users; reused by requireAdmin + admin nav.
         c.set('isAdmin', await isAdminUser(c.env.DB, user, c.env));
       }
@@ -31,6 +37,37 @@ export const loadUser: MiddlewareHandler<AppContext> = async (c, next) => {
   }
 
   await next();
+};
+
+/**
+ * Reachable while banned: the suspension notice itself, sign-out, language
+ * switching, health checks, stored objects, and static assets (the suspension
+ * page still needs its stylesheet and htmx bundle).
+ */
+function isAllowedWhileBanned(path: string): boolean {
+  return (
+    path === '/suspended' ||
+    path === '/auth/logout' ||
+    path === '/health' ||
+    path === '/styles.css' ||
+    path.startsWith('/language/') ||
+    path.startsWith('/files/') ||
+    path.startsWith('/vendor/')
+  );
+}
+
+/**
+ * Sends a signed-in, banned account to `/suspended` for every other route.
+ * Session revocation on ban is best-effort (KV index), so this D1-backed gate
+ * is what actually stops a surviving cookie from using the dashboard, the
+ * admin console, or any mutating endpoint.
+ */
+export const enforceBan: MiddlewareHandler<AppContext> = async (c, next) => {
+  if (!c.get('isBanned')) return next();
+  const path = new URL(c.req.url).pathname;
+  if (isAllowedWhileBanned(path)) return next();
+  if (c.req.header('HX-Request')) return c.text('Forbidden', 403);
+  return c.redirect('/suspended');
 };
 
 export const csrfProtection: MiddlewareHandler<AppContext> = async (c, next) => {

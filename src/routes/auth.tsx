@@ -12,6 +12,7 @@ import { Login } from '../views/login';
 import {
   createLoginToken,
   consumeLoginToken,
+  getActiveBan,
   getLoginToken,
   getTotpFactor,
   getUserByEmail,
@@ -65,6 +66,8 @@ function errorMessage(code: string | undefined, t: TranslateFn): string | undefi
       return t('auth.err.totpInvalid');
     case 'rate_limited':
       return t('auth.err.rateLimited');
+    case 'banned':
+      return t('auth.err.banned');
     default:
       return undefined;
   }
@@ -188,6 +191,7 @@ authRoutes.get('/auth/github/callback', async (c) => {
       defaults: { theme: settings.defaultTheme, visibility: settings.defaultVisibility },
     });
     if (!user) return c.redirect('/login?error=signup_disabled');
+    if (await getActiveBan(c.env.DB, user.id)) return c.redirect('/login?error=banned');
     await createSession(c, user.id);
 
     return c.redirect(safeNext(next, appUrl(c.env)) ?? landingFor(user));
@@ -308,7 +312,10 @@ authRoutes.post('/auth/totp', async (c) => {
   const result = await verifyTotp(factor.secret, code, { window: 1, lastStep: factor.last_step });
   if (!result.valid) return c.redirect(back);
 
+  // Only after a valid code, so "suspended" cannot be probed without the
+  // second factor. The code step is still consumed for a banned account.
   await setTotpLastStep(c.env.DB, user.id, result.step);
+  if (await getActiveBan(c.env.DB, user.id)) return c.redirect('/login?error=banned');
   await createSession(c, user.id);
   return c.redirect(next ?? landingFor(user));
 });
@@ -353,6 +360,7 @@ authRoutes.get('/auth/email/verify', async (c) => {
     defaults: { theme: settings.defaultTheme, visibility: settings.defaultVisibility },
   });
   if (!user) return c.redirect('/login?error=signup_disabled');
+  if (await getActiveBan(c.env.DB, user.id)) return c.redirect('/login?error=banned');
   await createSession(c, user.id);
 
   return c.redirect(next ?? landingFor(user));

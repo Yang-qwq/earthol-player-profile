@@ -30,17 +30,33 @@ import type { Locale, MessageKey, TranslateFn } from '../i18n';
 
 /**
  * Gallery image upload (dashboard Blocks editor). Clicking the per-row
- * "Add image" button opens the file picker; once a file is chosen it is
- * POSTed to /dashboard/gallery-image/upload (with the row's CSRF token),
- * and on success the returned same-origin URL is appended to the row's
- * items textarea — the field that is actually submitted, so the row saves
- * normally through the plain form POST. The textarea stays the source of
- * truth: uploads are an input convenience, never a requirement (no-JS and
- * external-URL workflows keep working unchanged). Delegated; no eval, so it
- * stays CSP-compatible.
+ * "Add images" button opens a multi-select file picker; every chosen file is
+ * POSTed to /dashboard/gallery-image/upload (with the row's CSRF token), and
+ * each returned same-origin URL is appended to the row's items textarea.
+ *
+ * After the batch finishes, the whole Blocks form is saved in the background
+ * (one `fetch`, no navigation), so images are persisted immediately instead of
+ * forcing a manual "Save blocks" after every upload. The textarea stays the
+ * source of truth: uploads are an input convenience, never a requirement
+ * (no-JS and external-URL workflows keep working unchanged). Delegated; no
+ * eval, so it stays CSP-compatible.
  */
-const GALLERY_UPLOAD_SCRIPT = (s: Record<string, string>) =>
-  `(var S=${JSON.stringify(s)});(function(){function msg(form,code){var map={unavailable:'unavailable',invalid_file:'invalid_file',file_too_large:'file_too_large',gallery_file_too_large:'gallery_file_too_large',invalid_file_type:'invalid_file_type',rate_limited:'rate_limited',network_error:'network_error'};var el=form?form.querySelector('[data-block-upload-error]'):null;if(!el)return;el.hidden=false;el.textContent=S[map[code]||'generic']||S.generic||code;}function reset(row){var btn=row?row.querySelector('[data-gallery-upload]'):null;if(btn)btn.disabled=false;}function upload(file,row){var btn=row?row.querySelector('[data-gallery-upload]'):null;if(btn)btn.disabled=true;var form=row?row.closest('form'):null;var csrf=form?form.querySelector('input[name=_csrf]'):null;var fd=new FormData();fd.append('file',file);if(csrf)fd.append('_csrf',csrf.value);fetch('/dashboard/gallery-image/upload',{method:'POST',body:fd,credentials:'same-origin'}).then(function(r){return r.json().then(function(j){return{ok:r.ok,body:j};}).catch(function(){return{ok:r.ok,body:{}};});}).then(function(res){if(res.ok&&res.body&&res.body.url){var ta=row?row.querySelector('textarea[name=items]'):null;if(ta){var cur=ta.value.replace(/[\\r\\n]+$/,'');ta.value=(cur?cur+String.fromCharCode(10):'')+res.body.url;}}else{msg(row?row.closest('form'):null,res.body&&res.body.error);reset(row);}}).catch(function(){msg(row?row.closest('form'):null,'network_error');reset(row);});}document.addEventListener('click',function(ev){var t=ev.target;while(t&&t!==document.body){if(t.hasAttribute&&t.hasAttribute('data-gallery-upload')){ev.preventDefault();var row=t.closest('[data-block-row]');if(!row)return;var file=row.querySelector('[data-gallery-file]');if(file){file.value='';file.click();}return;}t=t.parentNode;}});document.addEventListener('change',function(ev){var t=ev.target;if(!t||!t.hasAttribute||!t.hasAttribute('data-gallery-file'))return;if(!t.files||!t.files.length)return;var row=t.closest('[data-block-row]');if(!row)return;upload(t.files[0],row);});})();`;
+const GALLERY_UPLOAD_SCRIPT = (s: Record<string, string>) => `(function(){
+var S=${JSON.stringify(s)};
+var busy=false;
+function msg(form,code){var map={unavailable:'unavailable',invalid_file:'invalid_file',file_too_large:'file_too_large',gallery_file_too_large:'gallery_file_too_large',invalid_file_type:'invalid_file_type',rate_limited:'rate_limited',network_error:'network_error',save_failed:'save_failed'};var el=form?form.querySelector('[data-block-upload-error]'):null;if(!el)return;el.hidden=false;el.textContent=S[map[code]||'generic']||S.generic||code;}
+function clearMsg(form){var el=form?form.querySelector('[data-block-upload-error]'):null;if(el){el.hidden=true;el.textContent='';}}
+function setStatus(row,text){var el=row?row.querySelector('[data-block-upload-status]'):null;if(el)el.textContent=text||'';}
+function setButtons(disabled){var list=document.querySelectorAll('[data-gallery-upload]');for(var i=0;i<list.length;i++)list[i].disabled=disabled;}
+function resetRow(row){var input=row?row.querySelector('[data-gallery-file]'):null;if(input){input.disabled=false;input.value='';}}
+function finish(row){resetRow(row);setButtons(false);busy=false;}
+function appendUrl(row,url){var ta=row?row.querySelector('textarea[name=items]'):null;if(!ta)return;var cur=ta.value.replace(/[\\r\\n]+$/,'');ta.value=(cur?cur+String.fromCharCode(10):'')+url;}
+function uploadOne(file,row){var form=row?row.closest('form'):null;var csrf=form?form.querySelector('input[name=_csrf]'):null;var fd=new FormData();fd.append('file',file);if(csrf)fd.append('_csrf',csrf.value);return fetch('/dashboard/gallery-image/upload',{method:'POST',body:fd,credentials:'same-origin'}).then(function(r){return r.json().then(function(j){return{ok:r.ok,body:j};}).catch(function(){return{ok:r.ok,body:{}};});}).then(function(res){if(res.ok&&res.body&&res.body.url){appendUrl(row,res.body.url);return true;}msg(form,res.body&&res.body.error);return false;}).catch(function(){msg(form,'network_error');return false;});}
+function saveBlocks(row){var form=row?row.closest('form'):null;if(!form)return Promise.resolve(false);setStatus(row,S.saving);return fetch(form.getAttribute('action')||location.pathname,{method:'POST',body:new FormData(form),credentials:'same-origin'}).then(function(r){return r.text().then(function(){return{ok:r.ok,url:r.url};});}).then(function(res){if(!res.ok||res.url.indexOf('error=')>=0||res.url.indexOf('/login')>=0){msg(form,'save_failed');setStatus(row,'');return false;}setStatus(row,S.saved);return true;}).catch(function(){msg(form,'save_failed');setStatus(row,'');return false;});}
+function uploadAll(files,row){var form=row?row.closest('form'):null;if(!row||!form||!files.length||busy)return;busy=true;setButtons(true);var input=row.querySelector('[data-gallery-file]');if(input)input.disabled=true;clearMsg(form);var total=files.length;var index=0;var anyUploaded=false;function next(){if(index>=total){if(anyUploaded){saveBlocks(row).then(function(){finish(row);});}else{finish(row);}return;}var file=files[index];index+=1;setStatus(row,S.uploading.replace('{done}',String(index)).replace('{total}',String(total)));uploadOne(file,row).then(function(ok){if(ok)anyUploaded=true;next();});}next();}
+document.addEventListener('click',function(ev){var t=ev.target;while(t&&t!==document.body){if(t.hasAttribute&&t.hasAttribute('data-gallery-upload')){ev.preventDefault();if(busy)return;var row=t.closest('[data-block-row]');if(!row)return;var input=row.querySelector('[data-gallery-file]');if(input){input.value='';input.click();}return;}t=t.parentNode;}});
+document.addEventListener('change',function(ev){var t=ev.target;if(!t||!t.hasAttribute||!t.hasAttribute('data-gallery-file'))return;var row=t.closest('[data-block-row]');if(!row)return;var files=Array.prototype.slice.call(t.files||[]);uploadAll(files,row);});
+})();`;
 
 /**
  * Renders the otpauth:// provisioning URI as a QR code for a pending TOTP
@@ -84,6 +100,8 @@ export interface DashboardProps {
   totpUri?: string | null;
   /** True when an AI chat provider is configured for this deployment. */
   aiConfigured: boolean;
+  /** Unread moderator receipts (badge on the console Reports menu). */
+  receiptUnread?: number;
   error?: string;
   message?: string;
   nonce?: string;
@@ -118,6 +136,7 @@ export function Dashboard({
   totpFactor,
   totpUri,
   aiConfigured,
+  receiptUnread,
   error,
   message,
   nonce,
@@ -164,6 +183,7 @@ export function Dashboard({
       locale={locale}
       pathname={pathname}
       isAdmin={isAdmin}
+      receiptUnread={receiptUnread}
     >
       {/* AI Assistant Modal + floating button: rendered on every dashboard
           section so the assistant stays reachable from anywhere. */}
@@ -1195,6 +1215,10 @@ export function Dashboard({
             invalid_file_type: t('dash.err.invalidFileType'),
             rate_limited: t('dash.err.rateLimited'),
             network_error: t('dash.err.networkError'),
+            save_failed: t('dash.err.saveFailed'),
+            uploading: t('dash.block.uploading'),
+            saving: t('dash.block.uploadSaving'),
+            saved: t('dash.block.uploadSaved'),
           }),
         }}
       />
@@ -1612,12 +1636,13 @@ function BlockEditorRow(props: {
         {uploadEnabled ? (
           <div class="mt-2 flex flex-wrap items-center gap-2">
             {/* The hidden picker is driven by the button via the page script
-                (GALLERY_UPLOAD_SCRIPT): click → choose file → upload → the
-                returned same-origin URL is appended to the textarea above, so
-                the row still submits through the plain form POST. */}
+                (GALLERY_UPLOAD_SCRIPT): click → choose one or more files →
+                upload each → append the URLs above → auto-save the Blocks form.
+                Without JavaScript the row still submits through the plain POST. */}
             <input
               type="file"
               data-gallery-file
+              multiple
               accept="image/png,image/jpeg,image/gif,image/webp"
               style="display:none"
               aria-hidden="true"
@@ -1635,6 +1660,7 @@ function BlockEditorRow(props: {
               </span>
               {t('dash.block.addImage')}
             </button>
+            <span data-block-upload-status class="text-xs text-muted-foreground" aria-live="polite"></span>
             <span data-block-upload-error class="text-xs text-danger" role="alert" hidden></span>
           </div>
         ) : null}

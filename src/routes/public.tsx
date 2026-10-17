@@ -13,6 +13,7 @@ import { FollowList } from '../views/follows';
 import {
   countFollowers,
   countFollowing,
+  getActiveBan,
   getFollowStartedAt,
   getProfileLayout,
   getUserByUsername,
@@ -84,11 +85,21 @@ publicRoutes.get('/:username', async (c) => {
 
   const viewer = c.get('user');
   const isOwner = Boolean(viewer && viewer.id === user.id);
+  // A banned profile is invisible to everyone else (404, same as a missing
+  // handle) and sends its owner to the suspension notice. Admins get a
+  // noindex, uncached preview so they can review the account. Checked before
+  // the KV cache so a stale cached copy can never outlive a ban.
+  const activeBan = await getActiveBan(c.env.DB, user.id);
+  if (activeBan) {
+    if (isOwner) return c.redirect('/suspended');
+    if (!c.get('isAdmin')) return c.notFound();
+  }
   if (user.visibility === 'private' && !isOwner) return c.notFound();
 
   const canonical = `${appUrl(c.env)}/${user.username}`;
   const cacheable = !viewer && user.visibility === 'public';
-  const robots = user.visibility === 'public' ? undefined : 'noindex, nofollow';
+  const robots =
+    activeBan || user.visibility !== 'public' ? 'noindex, nofollow' : undefined;
   const nonce = c.get('secureHeadersNonce') ?? '';
 
   if (cacheable) {
@@ -224,6 +235,7 @@ publicRoutes.get('/:username', async (c) => {
       blocks={renderBlocks}
       blockViewers={viewerLists}
       fieldsPosition={fieldsPosition}
+      restricted={Boolean(activeBan)}
       csrfToken={c.get('csrfToken')}
       currentUser={navUser(viewer)}
       isOwner={isOwner}
@@ -270,12 +282,18 @@ async function followListPage(c: Context<AppContext>, kind: 'followers' | 'follo
 
   const viewer = c.get('user');
   const isOwner = Boolean(viewer && viewer.id === user.id);
+  const activeBan = await getActiveBan(c.env.DB, user.id);
+  if (activeBan) {
+    if (isOwner) return c.redirect('/suspended');
+    if (!c.get('isAdmin')) return c.notFound();
+  }
   if (user.visibility === 'private' && !isOwner) return c.notFound();
 
   const variant = kind === 'followers' ? ':followers' : ':following';
   const canonical = `${appUrl(c.env)}/${user.username}/${kind}`;
   const cacheable = !viewer && user.visibility === 'public';
-  const robots = user.visibility === 'public' ? undefined : 'noindex, nofollow';
+  const robots =
+    activeBan || user.visibility !== 'public' ? 'noindex, nofollow' : undefined;
   const nonce = c.get('secureHeadersNonce') ?? '';
 
   if (cacheable) {

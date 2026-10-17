@@ -33,6 +33,8 @@ export interface ProfileProps {
    * `blocks.length` = last. The identity card is always above both.
    */
   fieldsPosition?: number;
+  /** True for an admin preview of a suspended account (noindex, uncached). */
+  restricted?: boolean;
   csrfToken: string;
   currentUser?: { username: string; displayName?: string | null } | null;
   isOwner?: boolean;
@@ -188,6 +190,7 @@ export function Profile({
   blocks,
   blockViewers,
   fieldsPosition,
+  restricted,
   csrfToken,
   currentUser,
   isOwner,
@@ -291,6 +294,14 @@ export function Profile({
       }}
     >
       <section class="mx-auto max-w-2xl pt-2">
+        {restricted ? (
+          <div class="mb-5 flex items-start gap-3 rounded-2xl border border-danger/30 bg-danger/5 p-4 text-sm">
+            <span class="material-symbols-outlined shrink-0 text-danger" aria-hidden="true">
+              gavel
+            </span>
+            <p class="text-foreground/90">{t('profile.adminPreview', { username: user.username ?? '' })}</p>
+          </div>
+        ) : null}
         <div class="card overflow-hidden">
           <div class={`h-28 bg-gradient-to-r ${theme.accent}`} />
           <div class="px-6 pb-6">
@@ -319,8 +330,10 @@ export function Profile({
               </div>
               {/* Follow actions: real toggle for signed-in visitors (htmx
                   swaps the cluster in place), sign-in prompt for anonymous
-                  viewers, edit shortcut for the owner. The report option in
-                  the menu stays hidden until that feature ships. */}
+                  viewers, edit shortcut for the owner. The report link is
+                  viewer-independent (non-owners only) so it can live in the
+                  shared anonymous profile cache; the report route itself
+                  sends signed-out visitors through sign-in. */}
               <div class="flex shrink-0 items-center gap-1.5">
                 <FollowControl
                   username={user.username ?? ''}
@@ -330,34 +343,35 @@ export function Profile({
                   csrfToken={csrfToken}
                   t={t}
                 />
-                <div class="dropdown" data-dropdown>
-                  <button
-                    type="button"
-                    class="btn-icon"
-                    data-dropdown-toggle
-                    aria-label={t('profile.more')}
-                    title={t('profile.more')}
-                    aria-haspopup="menu"
-                    aria-expanded="false"
-                  >
-                    <span class="material-symbols-outlined" aria-hidden="true">
-                      more_horiz
-                    </span>
-                  </button>
-                  <div class="dropdown-menu" data-dropdown-menu role="menu">
+                {isOwner ? null : (
+                  <div class="dropdown" data-dropdown>
                     <button
                       type="button"
-                      role="menuitem"
-                      data-profile-report
-                      class="hidden w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
+                      class="btn-icon"
+                      data-dropdown-toggle
+                      aria-label={t('profile.more')}
+                      title={t('profile.more')}
+                      aria-haspopup="menu"
+                      aria-expanded="false"
                     >
-                      <span class="material-symbols-outlined icon-sm" aria-hidden="true">
-                        report
+                      <span class="material-symbols-outlined" aria-hidden="true">
+                        more_horiz
                       </span>
-                      {t('profile.report')}
                     </button>
+                    <div class="dropdown-menu" data-dropdown-menu role="menu">
+                      <a
+                        role="menuitem"
+                        href={`/report/${encodeURIComponent(user.username ?? '')}`}
+                        class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
+                      >
+                        <span class="material-symbols-outlined icon-sm" aria-hidden="true">
+                          report
+                        </span>
+                        {t('profile.report')}
+                      </a>
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
             </div>
 

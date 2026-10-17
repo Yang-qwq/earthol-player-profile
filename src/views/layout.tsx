@@ -32,6 +32,8 @@ export interface LayoutProps {
   customJs?: string;
   /** Admin-authored raw HTML footer; replaces the default footer when set. */
   customFooter?: string;
+  /** Unread moderator receipts, shown as a badge on the console Reports menu. */
+  receiptUnread?: number;
   og?: {
     title: string;
     description: string;
@@ -212,6 +214,7 @@ export function Layout({
   locale,
   pathname,
   isAdmin,
+  receiptUnread,
   customCss,
   customJs,
   customFooter,
@@ -278,6 +281,7 @@ export function Layout({
             locale={locale}
             pathname={pathname}
             isAdmin={isAdmin}
+            receiptUnread={receiptUnread}
             customFooter={customFooter}
           >
             {children}
@@ -426,6 +430,7 @@ function ConsoleShell({
   locale,
   pathname,
   isAdmin,
+  receiptUnread,
   customFooter,
   children,
 }: PropsWithChildren<{
@@ -438,10 +443,13 @@ function ConsoleShell({
   locale: Locale;
   pathname: string;
   isAdmin?: boolean;
+  receiptUnread?: number;
   customFooter?: string;
 }>) {
   const username = currentUser?.username ?? '';
   const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
+  const onReports = pathname === '/reports' || pathname === '/admin/moderation';
+  const onAdmin = isActive('/admin') && pathname !== '/admin/moderation';
   const navItem = (active: boolean) =>
     `flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition ${active
       ? 'bg-primary/10 font-semibold text-primary ring-1 ring-inset ring-primary/20'
@@ -514,10 +522,63 @@ function ConsoleShell({
               })}
             </div>
           </details>
+          {/* Reports is its own top-level module: the second level holds the
+              reporter inbox and, for admins, the moderation queue. Keeping the
+              queue out of the Admin submenu (filtered below) avoids a duplicate
+              entry point. */}
+          <details class="group" open={onReports ? true : undefined}>
+            <summary
+              class={`${navItem(onReports)} cursor-pointer list-none select-none [&::-webkit-details-marker]:hidden`}
+            >
+              <span class="material-symbols-outlined" aria-hidden="true">
+                flag
+              </span>
+              <span class="flex-1">{t('reports.nav')}</span>
+              {receiptUnread && receiptUnread > 0 ? (
+                <span class="chip bg-danger/10 text-danger tabular-nums">{receiptUnread}</span>
+              ) : null}
+              <span
+                class="material-symbols-outlined icon-sm transition-transform group-open:rotate-90"
+                aria-hidden="true"
+              >
+                chevron_right
+              </span>
+            </summary>
+            <div class="ml-5 mt-1 space-y-0.5 border-l border-border/60 pl-2">
+              <a
+                href="/reports"
+                aria-current={pathname === '/reports' ? 'page' : undefined}
+                class={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition ${pathname === '/reports'
+                  ? 'bg-primary/10 font-semibold text-primary'
+                  : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                  }`}
+              >
+                <span class="material-symbols-outlined icon-sm" aria-hidden="true">
+                  inbox
+                </span>
+                {t('reports.nav.user')}
+              </a>
+              {isAdmin ? (
+                <a
+                  href="/admin/moderation"
+                  aria-current={pathname === '/admin/moderation' ? 'page' : undefined}
+                  class={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition ${pathname === '/admin/moderation'
+                    ? 'bg-primary/10 font-semibold text-primary'
+                    : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                    }`}
+                >
+                  <span class="material-symbols-outlined icon-sm" aria-hidden="true">
+                    gavel
+                  </span>
+                  {t('reports.nav.admin')}
+                </a>
+              ) : null}
+            </div>
+          </details>
           {isAdmin ? (
-            <details class="group" open={isActive('/admin') ? true : undefined}>
+            <details class="group" open={onAdmin ? true : undefined}>
               <summary
-                class={`${navItem(isActive('/admin'))} cursor-pointer list-none select-none [&::-webkit-details-marker]:hidden`}
+                class={`${navItem(onAdmin)} cursor-pointer list-none select-none [&::-webkit-details-marker]:hidden`}
               >
                 <span class="material-symbols-outlined" aria-hidden="true">
                   admin_panel_settings
@@ -531,7 +592,7 @@ function ConsoleShell({
                 </span>
               </summary>
               <div class="ml-5 mt-1 space-y-0.5 border-l border-border/60 pl-2">
-                {ADMIN_SECTIONS.map((item) => {
+                {ADMIN_SECTIONS.filter((item) => item.section !== 'moderation').map((item) => {
                   const active = pathname === item.path;
                   return (
                     <a

@@ -9,6 +9,7 @@
 import { Hono } from 'hono';
 import type { AppContext } from '../types';
 import { STORAGE_KEY_RE, STORAGE_PATH_PREFIX, storageEnabled } from '../lib/storage';
+import { getActiveBan } from '../db/queries';
 
 export const fileRoutes = new Hono<AppContext>();
 
@@ -28,6 +29,12 @@ fileRoutes.on(['GET', 'HEAD'], '/files/*', async (c) => {
     return notFound();
   }
   if (!STORAGE_KEY_RE.test(key)) return notFound();
+
+  // A suspended account's uploaded media is not served either. The key shape
+  // is `<avatars|gallery>/<userId>/<token>.<ext>`, so the owner is the second
+  // segment (the regex above guarantees it exists).
+  const ownerId = key.split('/')[1];
+  if (await getActiveBan(c.env.DB, ownerId)) return notFound();
 
   if (isHead) {
     const head = await c.env.R2.head(key);

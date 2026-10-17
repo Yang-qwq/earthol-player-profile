@@ -15,7 +15,9 @@ import { dashboardRoutes } from './routes/dashboard';
 import { adminRoutes } from './routes/admin';
 import { languageRoutes } from './routes/language';
 import { fileRoutes } from './routes/files';
-import { csrfProtection, loadUser } from './middleware/auth';
+import { moderationRoutes } from './routes/moderation';
+import { reportsRoutes } from './routes/reports';
+import { csrfProtection, enforceBan, loadUser } from './middleware/auth';
 import { resolveLocale } from './middleware/locale';
 import { loadRuntime } from './middleware/runtime';
 import { htmlLang } from './i18n';
@@ -43,10 +45,11 @@ export function createApp() {
     }),
   );
 
-  // Order matters: locale → user (sets isAdmin) → runtime (settings + the
-  // maintenance gate, which needs isAdmin) → CSRF.
+  // Order matters: locale → user (sets isAdmin/isBanned) → ban gate → runtime
+  // (settings + the maintenance gate, which needs isAdmin) → CSRF.
   app.use('*', resolveLocale);
   app.use('*', loadUser);
+  app.use('*', enforceBan);
   app.use('*', loadRuntime);
   app.use('*', csrfProtection);
 
@@ -57,6 +60,10 @@ export function createApp() {
   app.route('/', onboardingRoutes);
   app.route('/', dashboardRoutes);
   app.route('/', adminRoutes);
+  // User-facing reports + the suspension notice; registered before the
+  // `/:username` catch-all in `publicRoutes`.
+  app.route('/', moderationRoutes);
+  app.route('/', reportsRoutes);
   // Top-level prefix (`/files/*`), so it must register before `publicRoutes`.
   app.route('/', fileRoutes);
   app.route('/', publicRoutes);

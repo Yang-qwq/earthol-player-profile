@@ -4,6 +4,7 @@
  * never build SQL themselves.
  */
 import type {
+  BanStateRow,
   BlockInput,
   BlockKind,
   BlockRelation,
@@ -13,12 +14,17 @@ import type {
   FieldRow,
   IdentityRow,
   LoginTokenRow,
+  ModerationActionRow,
   ProfileBlockRow,
   ProfileInput,
+  ReportReceiptRow,
+  ReportRow,
+  ReportStatus,
   TagCategoryRow,
   TagInput,
   TagMatch,
   TotpFactorRow,
+  UserBanRow,
   UserRow,
   UserTagRow,
 } from './types';
@@ -169,11 +175,16 @@ export async function isUsernameReserved(db: D1Database, username: string): Prom
 export async function listUsernames(db: D1Database, limit = 50): Promise<UserRow[]> {
   const result = await db
     .prepare(
-      `SELECT * FROM users
-       WHERE username IS NOT NULL AND visibility = 'public'
-       ORDER BY updated_at DESC LIMIT ?`,
+      `SELECT u.* FROM users u
+       WHERE u.username IS NOT NULL AND u.visibility = 'public'
+         AND NOT EXISTS (
+           SELECT 1 FROM user_bans b
+           WHERE b.user_id = u.id AND b.revoked_at IS NULL
+             AND (b.expires_at IS NULL OR b.expires_at > ?)
+         )
+       ORDER BY u.updated_at DESC LIMIT ?`,
     )
-    .bind(limit)
+    .bind(now(), limit)
     .all<UserRow>();
   return result.results ?? [];
 }
@@ -341,6 +352,11 @@ export async function listTagSuggestions(
   limit = 8,
 ): Promise<string[]> {
   const q = query.trim();
+  const banFilter = `NOT EXISTS (
+    SELECT 1 FROM user_bans b
+    WHERE b.user_id = u.id AND b.revoked_at IS NULL
+      AND (b.expires_at IS NULL OR b.expires_at > ?)
+  )`;
   const statement = q
     ? db
         .prepare(
@@ -348,23 +364,25 @@ export async function listTagSuggestions(
            FROM user_tags t
            JOIN users u ON u.id = t.user_id
            WHERE t.category_id = ? AND u.visibility != 'private' AND t.hidden = 0
+             AND ${banFilter}
              AND t.value LIKE ? ESCAPE '\\'
            GROUP BY t.value
            ORDER BY uses DESC, t.value ASC
            LIMIT ?`,
         )
-        .bind(categoryId, `%${escapeLike(q)}%`, limit)
+        .bind(categoryId, now(), `%${escapeLike(q)}%`, limit)
     : db
         .prepare(
           `SELECT t.value AS value, COUNT(*) AS uses
            FROM user_tags t
            JOIN users u ON u.id = t.user_id
            WHERE t.category_id = ? AND u.visibility != 'private' AND t.hidden = 0
+             AND ${banFilter}
            GROUP BY t.value
            ORDER BY uses DESC, t.value ASC
            LIMIT ?`,
         )
-        .bind(categoryId, limit);
+        .bind(categoryId, now(), limit);
   const result = await statement.all<{ value: string }>();
   return (result.results ?? []).map((row) => row.value);
 }
@@ -455,9 +473,14 @@ export async function countFollowers(db: D1Database, followingId: string): Promi
     .prepare(
       `SELECT COUNT(*) AS n FROM follows f
        JOIN users u ON u.id = f.follower_id
-       WHERE f.following_id = ? AND u.visibility != 'private'`,
+       WHERE f.following_id = ? AND u.visibility != 'private'
+         AND NOT EXISTS (
+           SELECT 1 FROM user_bans b
+           WHERE b.user_id = u.id AND b.revoked_at IS NULL
+             AND (b.expires_at IS NULL OR b.expires_at > ?)
+         )`,
     )
-    .bind(followingId)
+    .bind(followingId, now())
     .first<{ n: number }>();
   return row?.n ?? 0;
 }
@@ -468,9 +491,14 @@ export async function countFollowing(db: D1Database, followerId: string): Promis
     .prepare(
       `SELECT COUNT(*) AS n FROM follows f
        JOIN users u ON u.id = f.following_id
-       WHERE f.follower_id = ? AND u.visibility != 'private'`,
+       WHERE f.follower_id = ? AND u.visibility != 'private'
+         AND NOT EXISTS (
+           SELECT 1 FROM user_bans b
+           WHERE b.user_id = u.id AND b.revoked_at IS NULL
+             AND (b.expires_at IS NULL OR b.expires_at > ?)
+         )`,
     )
-    .bind(followerId)
+    .bind(followerId, now())
     .first<{ n: number }>();
   return row?.n ?? 0;
 }
@@ -490,10 +518,15 @@ export async function listFollowers(
       `SELECT u.* FROM follows f
        JOIN users u ON u.id = f.follower_id
        WHERE f.following_id = ? AND u.username IS NOT NULL AND u.visibility != 'private'
+         AND NOT EXISTS (
+           SELECT 1 FROM user_bans b
+           WHERE b.user_id = u.id AND b.revoked_at IS NULL
+             AND (b.expires_at IS NULL OR b.expires_at > ?)
+         )
        ORDER BY f.created_at DESC, f.follower_id ASC
        LIMIT ?`,
     )
-    .bind(followingId, limit)
+    .bind(followingId, now(), limit)
     .all<UserRow>();
   return result.results ?? [];
 }
@@ -509,10 +542,15 @@ export async function listFollowing(
       `SELECT u.* FROM follows f
        JOIN users u ON u.id = f.following_id
        WHERE f.follower_id = ? AND u.username IS NOT NULL AND u.visibility != 'private'
+         AND NOT EXISTS (
+           SELECT 1 FROM user_bans b
+           WHERE b.user_id = u.id AND b.revoked_at IS NULL
+             AND (b.expires_at IS NULL OR b.expires_at > ?)
+         )
        ORDER BY f.created_at DESC, f.following_id ASC
        LIMIT ?`,
     )
-    .bind(followerId, limit)
+    .bind(followerId, now(), limit)
     .all<UserRow>();
   return result.results ?? [];
 }
@@ -945,13 +983,18 @@ export async function searchUserSuggestions(
   const like = `%${escapeLike(q)}%`;
   const result = await db
     .prepare(
-      `SELECT * FROM users
-       WHERE username IS NOT NULL AND visibility != 'private'
-         AND (lower(username) LIKE ? ESCAPE '\\' OR lower(display_name) LIKE ? ESCAPE '\\')
-       ORDER BY username ASC
+      `SELECT * FROM users u
+       WHERE u.username IS NOT NULL AND u.visibility != 'private'
+         AND NOT EXISTS (
+           SELECT 1 FROM user_bans b
+           WHERE b.user_id = u.id AND b.revoked_at IS NULL
+             AND (b.expires_at IS NULL OR b.expires_at > ?)
+         )
+         AND (lower(u.username) LIKE ? ESCAPE '\\' OR lower(u.display_name) LIKE ? ESCAPE '\\')
+       ORDER BY u.username ASC
        LIMIT ?`,
     )
-    .bind(like, like, limit)
+    .bind(now(), like, like, limit)
     .all<UserRow>();
   return result.results ?? [];
 }
@@ -1152,21 +1195,30 @@ export async function searchUsers(
   offset = 0,
 ): Promise<UserRow[]> {
   const q = query.trim().toLowerCase();
+  // The admin search keeps banned accounts visible (they still need
+  // moderation), but flags them so the users table can show a badge.
+  const bannedFlag = `EXISTS (
+    SELECT 1 FROM user_bans b
+    WHERE b.user_id = u.id AND b.revoked_at IS NULL
+      AND (b.expires_at IS NULL OR b.expires_at > ?)
+  ) AS is_banned`;
   if (!q) {
     const result = await db
-      .prepare('SELECT * FROM users ORDER BY created_at DESC LIMIT ? OFFSET ?')
-      .bind(limit, offset)
+      .prepare(
+        `SELECT u.*, ${bannedFlag} FROM users u ORDER BY u.created_at DESC LIMIT ? OFFSET ?`,
+      )
+      .bind(now(), limit, offset)
       .all<UserRow>();
     return result.results ?? [];
   }
   const like = `%${q}%`;
   const result = await db
     .prepare(
-      `SELECT * FROM users
-       WHERE lower(username) LIKE ? OR lower(email) LIKE ? OR lower(display_name) LIKE ?
-       ORDER BY created_at DESC LIMIT ? OFFSET ?`,
+      `SELECT u.*, ${bannedFlag} FROM users u
+       WHERE lower(u.username) LIKE ? OR lower(u.email) LIKE ? OR lower(u.display_name) LIKE ?
+       ORDER BY u.created_at DESC LIMIT ? OFFSET ?`,
     )
-    .bind(like, like, like, limit, offset)
+    .bind(now(), like, like, like, limit, offset)
     .all<UserRow>();
   return result.results ?? [];
 }
@@ -1202,4 +1254,375 @@ export async function deleteUser(db: D1Database, userId: string): Promise<UserRo
   }
   await db.batch(statements);
   return user;
+}
+
+/* ----------------------------- moderation ----------------------------- */
+
+/**
+ * The profile/report join used by every moderation read. Reporter and handler
+ * are LEFT JOINed because those FKs are nulled when an account is deleted;
+ * the target is an INNER JOIN (a report cannot outlive its target).
+ */
+const REPORT_SELECT = `
+  SELECT r.*,
+         rep.username     AS reporter_username,
+         rep.display_name AS reporter_display_name,
+         tgt.username     AS target_username,
+         tgt.display_name AS target_display_name,
+         handler.username AS handler_username
+  FROM reports r
+  LEFT JOIN users rep ON rep.id = r.reporter_id
+  JOIN users tgt ON tgt.id = r.target_user_id
+  LEFT JOIN users handler ON handler.id = r.handled_by`;
+
+export async function createReport(
+  db: D1Database,
+  input: {
+    reporterId: string;
+    targetUserId: string;
+    reason: string;
+    details: string | null;
+  },
+): Promise<string> {
+  const id = newId();
+  const ts = now();
+  await db
+    .prepare(
+      `INSERT INTO reports
+         (id, reporter_id, target_user_id, reason, details, status, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, 'open', ?, ?)`,
+    )
+    .bind(id, input.reporterId, input.targetUserId, input.reason, input.details, ts, ts)
+    .run();
+  return id;
+}
+
+/** The viewer's still-open report against a profile, if any (dedupe on submit). */
+export async function getOpenReportByReporter(
+  db: D1Database,
+  reporterId: string,
+  targetUserId: string,
+): Promise<ReportRow | null> {
+  return db
+    .prepare(`${REPORT_SELECT} WHERE r.reporter_id = ? AND r.target_user_id = ? AND r.status = 'open' ORDER BY r.created_at DESC LIMIT 1`)
+    .bind(reporterId, targetUserId)
+    .first<ReportRow>();
+}
+
+export function getReportById(db: D1Database, id: string): Promise<ReportRow | null> {
+  return db.prepare(`${REPORT_SELECT} WHERE r.id = ?`).bind(id).first<ReportRow>();
+}
+
+/** Reports newest-first, optionally narrowed to one workflow state. */
+export async function listReports(
+  db: D1Database,
+  status: ReportStatus | 'all' = 'open',
+  limit = 100,
+  offset = 0,
+): Promise<ReportRow[]> {
+  const statement =
+    status === 'all'
+      ? db.prepare(
+          `${REPORT_SELECT}
+           ORDER BY CASE r.status WHEN 'open' THEN 0 ELSE 1 END, r.created_at DESC
+           LIMIT ? OFFSET ?`,
+        ).bind(limit, offset)
+      : db.prepare(`${REPORT_SELECT} WHERE r.status = ? ORDER BY r.created_at DESC LIMIT ? OFFSET ?`)
+          .bind(status, limit, offset);
+  const result = await statement.all<ReportRow>();
+  return result.results ?? [];
+}
+
+export async function setReportStatus(
+  db: D1Database,
+  id: string,
+  status: ReportStatus,
+  resolution: string | null,
+  handledBy: string,
+): Promise<void> {
+  const ts = now();
+  await db
+    .prepare(
+      `UPDATE reports
+       SET status = ?, resolution = ?, handled_by = ?, handled_at = ?, updated_at = ?
+       WHERE id = ?`,
+    )
+    .bind(status, resolution, handledBy, ts, ts, id)
+    .run();
+}
+
+export interface ReportCounts {
+  open: number;
+  resolved: number;
+  dismissed: number;
+}
+
+/** Reports filed by one user, newest first (the `/reports` inbox). */
+export async function listMyReports(
+  db: D1Database,
+  reporterId: string,
+  limit = 100,
+): Promise<ReportRow[]> {
+  const result = await db
+    .prepare(`${REPORT_SELECT} WHERE r.reporter_id = ? ORDER BY r.created_at DESC LIMIT ?`)
+    .bind(reporterId, limit)
+    .all<ReportRow>();
+  return result.results ?? [];
+}
+
+const RECEIPT_SELECT = `
+  SELECT rr.*,
+         a.username     AS admin_username,
+         a.display_name AS admin_display_name
+  FROM report_receipts rr
+  LEFT JOIN users a ON a.id = rr.admin_id`;
+
+export async function createReportReceipt(
+  db: D1Database,
+  input: { reportId: string; adminId: string; body: string },
+): Promise<string> {
+  const id = newId();
+  await db
+    .prepare(
+      `INSERT INTO report_receipts (id, report_id, admin_id, body, created_at, read_at)
+       VALUES (?, ?, ?, ?, ?, NULL)`,
+    )
+    .bind(id, input.reportId, input.adminId, input.body, now())
+    .run();
+  return id;
+}
+
+/** Every receipt on reports filed by `reporterId`, oldest first. */
+export async function listReceiptsForReporter(
+  db: D1Database,
+  reporterId: string,
+  limit = 500,
+): Promise<ReportReceiptRow[]> {
+  const result = await db
+    .prepare(
+      `${RECEIPT_SELECT}
+       JOIN reports r ON r.id = rr.report_id
+       WHERE r.reporter_id = ?
+       ORDER BY rr.created_at ASC
+       LIMIT ?`,
+    )
+    .bind(reporterId, limit)
+    .all<ReportReceiptRow>();
+  return result.results ?? [];
+}
+
+/** Marks every unread receipt on this reporter's reports as read. */
+export async function markReceiptsReadForReporter(
+  db: D1Database,
+  reporterId: string,
+): Promise<void> {
+  await db
+    .prepare(
+      `UPDATE report_receipts SET read_at = ?
+       WHERE read_at IS NULL
+         AND report_id IN (SELECT id FROM reports WHERE reporter_id = ?)`,
+    )
+    .bind(now(), reporterId)
+    .run();
+}
+
+/** Drives the unread badge on the console's Reports menu. */
+export async function countUnreadReceipts(db: D1Database, reporterId: string): Promise<number> {
+  const row = await db
+    .prepare(
+      `SELECT COUNT(*) AS n
+       FROM report_receipts rr
+       JOIN reports r ON r.id = rr.report_id
+       WHERE r.reporter_id = ? AND rr.read_at IS NULL`,
+    )
+    .bind(reporterId)
+    .first<{ n: number }>();
+  return row?.n ?? 0;
+}
+
+/**
+ * Resolves every still-open report against a target (used when banning).
+ */
+export async function resolveOpenReportsForTarget(
+  db: D1Database,
+  targetUserId: string,
+  handledBy: string,
+  resolution: string | null,
+): Promise<void> {
+  const ts = now();
+  await db
+    .prepare(
+      `UPDATE reports
+       SET status = 'resolved', resolution = ?, handled_by = ?, handled_at = ?, updated_at = ?
+       WHERE target_user_id = ? AND status = 'open'`,
+    )
+    .bind(resolution, handledBy, ts, ts, targetUserId)
+    .run();
+}
+
+export async function countReports(db: D1Database): Promise<ReportCounts> {
+  const row = await db
+    .prepare(
+      `SELECT
+         COALESCE(SUM(CASE WHEN status = 'open' THEN 1 ELSE 0 END), 0)      AS open,
+         COALESCE(SUM(CASE WHEN status = 'resolved' THEN 1 ELSE 0 END), 0)  AS resolved,
+         COALESCE(SUM(CASE WHEN status = 'dismissed' THEN 1 ELSE 0 END), 0) AS dismissed
+       FROM reports`,
+    )
+    .first<ReportCounts>();
+  return row ?? { open: 0, resolved: 0, dismissed: 0 };
+}
+
+/**
+ * The ban that currently applies to `userId`, if any. Authoritative (D1, not a
+ * cache) because every gate — sign-in, session use, public profile — depends on
+ * it; lifted and expired rows never match.
+ */
+export function getActiveBan(db: D1Database, userId: string): Promise<BanStateRow | null> {
+  return db
+    .prepare(
+      `SELECT * FROM user_bans
+       WHERE user_id = ? AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at > ?)`,
+    )
+    .bind(userId, now())
+    .first<BanStateRow>();
+}
+
+/** The stored ban row regardless of state, for the admin console. */
+export function getBan(db: D1Database, userId: string): Promise<BanStateRow | null> {
+  return db.prepare('SELECT * FROM user_bans WHERE user_id = ?').bind(userId).first<BanStateRow>();
+}
+
+const BAN_SELECT = `
+  SELECT b.*,
+         u.username  AS username,
+         u.display_name AS display_name,
+         a.username  AS created_by_username,
+         r.username  AS revoked_by_username
+  FROM user_bans b
+  JOIN users u ON u.id = b.user_id
+  LEFT JOIN users a ON a.id = b.created_by
+  LEFT JOIN users r ON r.id = b.revoked_by`;
+
+/** Ban history for the admin console: active rows first, then newest. */
+export async function listBans(db: D1Database, limit = 100): Promise<UserBanRow[]> {
+  const result = await db
+    .prepare(
+      `${BAN_SELECT}
+       ORDER BY CASE WHEN b.revoked_at IS NULL AND (b.expires_at IS NULL OR b.expires_at > ?)
+                     THEN 0 ELSE 1 END,
+                b.created_at DESC
+       LIMIT ?`,
+    )
+    .bind(now(), limit)
+    .all<UserBanRow>();
+  return result.results ?? [];
+}
+
+export async function countActiveBans(db: D1Database): Promise<number> {
+  const row = await db
+    .prepare(
+      `SELECT COUNT(*) AS n FROM user_bans
+       WHERE revoked_at IS NULL AND (expires_at IS NULL OR expires_at > ?)`,
+    )
+    .bind(now())
+    .first<{ n: number }>();
+  return row?.n ?? 0;
+}
+
+/**
+ * Applies (or replaces) an account's ban. One row per account: a re-ban resets
+ * the previous `revoked_at`/`created_at`, and `moderation_actions` keeps the
+ * history, so this table only ever describes the current/latest decision.
+ */
+export async function upsertBan(
+  db: D1Database,
+  input: {
+    userId: string;
+    reason: string;
+    note: string | null;
+    createdBy: string;
+    expiresAt: number | null;
+  },
+): Promise<void> {
+  await db
+    .prepare(
+      `INSERT INTO user_bans (user_id, reason, note, created_by, created_at, expires_at, revoked_at, revoked_by)
+       VALUES (?, ?, ?, ?, ?, ?, NULL, NULL)
+       ON CONFLICT (user_id) DO UPDATE SET
+         reason = excluded.reason,
+         note = excluded.note,
+         created_by = excluded.created_by,
+         created_at = excluded.created_at,
+         expires_at = excluded.expires_at,
+         revoked_at = NULL,
+         revoked_by = NULL`,
+    )
+    .bind(
+      input.userId,
+      input.reason,
+      input.note,
+      input.createdBy,
+      now(),
+      input.expiresAt,
+    )
+    .run();
+}
+
+export async function revokeBan(
+  db: D1Database,
+  userId: string,
+  revokedBy: string,
+): Promise<void> {
+  await db
+    .prepare('UPDATE user_bans SET revoked_at = ?, revoked_by = ? WHERE user_id = ?')
+    .bind(now(), revokedBy, userId)
+    .run();
+}
+
+export async function logModerationAction(
+  db: D1Database,
+  input: {
+    actorId: string;
+    action: string;
+    targetUserId?: string | null;
+    reportId?: string | null;
+    note?: string | null;
+  },
+): Promise<void> {
+  await db
+    .prepare(
+      `INSERT INTO moderation_actions
+         (id, actor_id, action, target_user_id, report_id, note, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .bind(
+      newId(),
+      input.actorId,
+      input.action,
+      input.targetUserId ?? null,
+      input.reportId ?? null,
+      input.note ?? null,
+      now(),
+    )
+    .run();
+}
+
+const ACTION_SELECT = `
+  SELECT m.*,
+         a.username AS actor_username,
+         t.username AS target_username
+  FROM moderation_actions m
+  LEFT JOIN users a ON a.id = m.actor_id
+  LEFT JOIN users t ON t.id = m.target_user_id`;
+
+export async function listModerationActions(
+  db: D1Database,
+  limit = 50,
+): Promise<ModerationActionRow[]> {
+  const result = await db
+    .prepare(`${ACTION_SELECT} ORDER BY m.created_at DESC LIMIT ?`)
+    .bind(limit)
+    .all<ModerationActionRow>();
+  return result.results ?? [];
 }

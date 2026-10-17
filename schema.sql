@@ -83,7 +83,8 @@ INSERT INTO reserved_usernames (name) VALUES
   ('auth'), ('api'), ('admin'), ('health'), ('partials'), ('assets'),
   ('about'), ('help'), ('terms'), ('privacy'), ('pricing'), ('blog'),
   ('u'), ('www'), ('cdn-cgi'), ('favicon.ico'), ('robots.txt'),
-  ('sitemap.xml'), ('styles.css'), ('app.js'), ('new'), ('edit'), ('me');
+  ('sitemap.xml'), ('styles.css'), ('app.js'), ('new'), ('edit'), ('me'),
+  ('report'), ('suspended'), ('moderation'), ('reports');
 
 -- Key/value configuration managed from the admin panel.
 CREATE TABLE settings (
@@ -220,3 +221,66 @@ CREATE TABLE profile_layout (
   fields_position INTEGER NOT NULL DEFAULT 0,
   CHECK (fields_position >= 0)
 );
+
+-- ------------------------------------------------------------ moderation
+-- Reports, bans, and the moderation audit trail. Same definitions as
+-- `migrations/0006_moderation.sql` (see the comments there for the design
+-- rules: app-level `reason` values, one ban row per account, append-only log).
+CREATE TABLE reports (
+  id             TEXT PRIMARY KEY,
+  reporter_id    TEXT REFERENCES users (id) ON DELETE SET NULL,
+  target_user_id TEXT NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  reason         TEXT NOT NULL,
+  details        TEXT,
+  status         TEXT NOT NULL DEFAULT 'open',
+  resolution     TEXT,
+  handled_by     TEXT REFERENCES users (id) ON DELETE SET NULL,
+  handled_at     INTEGER,
+  created_at     INTEGER NOT NULL,
+  updated_at     INTEGER NOT NULL,
+  CHECK (status IN ('open', 'resolved', 'dismissed'))
+);
+
+CREATE INDEX idx_reports_target ON reports (target_user_id, created_at);
+CREATE INDEX idx_reports_status ON reports (status, created_at);
+CREATE INDEX idx_reports_reporter ON reports (reporter_id, target_user_id);
+
+CREATE TABLE user_bans (
+  user_id    TEXT PRIMARY KEY REFERENCES users (id) ON DELETE CASCADE,
+  reason     TEXT NOT NULL,
+  note       TEXT,
+  created_by TEXT REFERENCES users (id) ON DELETE SET NULL,
+  created_at INTEGER NOT NULL,
+  expires_at INTEGER,
+  revoked_at INTEGER,
+  revoked_by TEXT REFERENCES users (id) ON DELETE SET NULL
+);
+
+CREATE INDEX idx_user_bans_active ON user_bans (revoked_at, expires_at);
+
+CREATE TABLE moderation_actions (
+  id             TEXT PRIMARY KEY,
+  actor_id       TEXT REFERENCES users (id) ON DELETE SET NULL,
+  action         TEXT NOT NULL,
+  target_user_id TEXT REFERENCES users (id) ON DELETE SET NULL,
+  report_id      TEXT REFERENCES reports (id) ON DELETE SET NULL,
+  note           TEXT,
+  created_at     INTEGER NOT NULL
+);
+
+CREATE INDEX idx_moderation_actions_created ON moderation_actions (created_at);
+
+-- In-app receipts from moderators to the reporter. One report may receive
+-- several; `read_at` is set when the reporter first opens `/reports` and drives
+-- the unread badge. Same definition as `migrations/0006_moderation.sql`.
+CREATE TABLE report_receipts (
+  id         TEXT PRIMARY KEY,
+  report_id  TEXT NOT NULL REFERENCES reports (id) ON DELETE CASCADE,
+  admin_id   TEXT REFERENCES users (id) ON DELETE SET NULL,
+  body       TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  read_at    INTEGER
+);
+
+CREATE INDEX idx_report_receipts_report ON report_receipts (report_id, created_at);
+CREATE INDEX idx_report_receipts_unread ON report_receipts (read_at);

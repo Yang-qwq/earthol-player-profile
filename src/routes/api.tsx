@@ -11,6 +11,7 @@ import type { UserRow } from '../db/types';
 import { FollowControl } from '../views/profile';
 import {
   follow,
+  getActiveBan,
   getUserByUsername,
   isFollowing,
   isUsernameReserved,
@@ -140,6 +141,8 @@ apiRoutes.post('/api/follow/:username', async (c) => {
   const username = c.req.param('username').toLowerCase();
   const target = await getUserByUsername(c.env.DB, username);
   if (!target) return c.notFound();
+  // A banned profile is not a followable target (and its page 404s).
+  if (await getActiveBan(c.env.DB, target.id)) return c.notFound();
 
   const isHtmx = Boolean(c.req.header('HX-Request'));
   const path = `/${target.username}`;

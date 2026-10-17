@@ -14,26 +14,50 @@ import { ADMIN_SECTION_PATH, type AdminSection } from '../lib/admin-nav';
 import { AdminView } from '../views/admin';
 import { requireAdmin } from '../middleware/auth';
 import { navUser } from '../lib/view';
-import { envAdminEmails } from '../lib/admin';
-import { LANDING_COPY_KEYS, MAX_LANDING_COPY, MAX_LANDING_URL, saveSettings } from '../lib/settings';
+import { envAdminEmails } from '../lib/admin';import { LANDING_COPY_KEYS, MAX_LANDING_COPY, MAX_LANDING_URL, saveSettings } from '../lib/settings';
 import {
   addReservedUsername,
+  countActiveBans,
+  countReports,
+  countUnreadReceipts,
   createTagCategory,
   deleteUser,
   deleteTagCategory,
   findTagCategoryByName,
+  getBan,
+  getReportById,
   getStats,
   getTagCategory,
   getUserById,
+  createReportReceipt,
+  listBans,
+  listModerationActions,
+  listReports,
   listReservedUsernames,
   listTagCategories,
+  logModerationAction,
   removeReservedUsername,
+  resolveOpenReportsForTarget,
+  revokeBan,
   searchUsers,
+  setReportStatus,
   setUserAdmin,
   updateTagCategory,
+  upsertBan,
 } from '../db/queries';
 import { invalidateAllProfiles, invalidateProfiles } from '../lib/profile-cache';
 import { deleteStoredImage } from '../lib/storage';
+import { revokeUserSessions } from '../lib/session';
+import {
+  MAX_BAN_NOTE,
+  MAX_MODERATION_NOTE,
+  MAX_RECEIPT_BODY,
+  banExpiry,
+  isBanDuration,
+  isReportReason,
+  isReportStatus,
+} from '../lib/moderation';
+import type { ReportStatus } from '../db/types';
 import { isTagColor } from '../lib/tags';
 import { isTheme, isVisibility } from '../lib/themes';
 import { isSafeFaviconUrl, isSafeLandingUrl, isSafeUrl, text } from '../lib/validate';
@@ -61,12 +85,23 @@ const SAVED_MESSAGES: Record<string, MessageKey> = {
   deleted: 'admin.saved.deleted',
   config: 'admin.saved.config',
   ai: 'admin.saved.ai',
+  moderation: 'admin.saved.moderation',
+  receipt: 'admin.saved.receipt',
+  banned: 'admin.saved.banned',
+  unbanned: 'admin.saved.unbanned',
 };
 
 const ERROR_MESSAGES: Record<string, MessageKey> = {
   self: 'admin.err.self',
   tag_name: 'admin.err.tagName',
   tag_duplicate: 'admin.err.tagDuplicate',
+  ban_self: 'admin.moderation.err.banSelf',
+  ban_admin: 'admin.moderation.err.banAdmin',
+  ban_reason: 'admin.moderation.err.reason',
+  ban_duration: 'admin.moderation.err.duration',
+  target: 'admin.moderation.err.target',
+  report: 'admin.moderation.err.report',
+  no_ban: 'admin.moderation.err.noBan',
 };
 
 /** Turn a redirect's `?saved=` / `?err=` code into a localized banner string. */
@@ -104,12 +139,27 @@ async function renderAdmin(c: Context<AppContext>, section: AdminSection) {
   const user = c.get('user')!;
   const query = (c.req.query('q') ?? '').trim();
 
-  const [stats, reserved, tagCategories, users] = await Promise.all([
-    section === 'overview' ? getStats(c.env.DB) : Promise.resolve(null),
-    section === 'reserved' ? listReservedUsernames(c.env.DB) : Promise.resolve(null),
-    section === 'tags' ? listTagCategories(c.env.DB) : Promise.resolve(null),
-    section === 'users' ? searchUsers(c.env.DB, query, 50, 0) : Promise.resolve(null),
-  ]);
+  // Report queue filter: a missing/unknown value defaults to the open queue.
+  const statusParam = c.req.query('status');
+  const reportStatus: ReportStatus | 'all' =
+    statusParam === 'all' || isReportStatus(statusParam) ? statusParam : 'open';
+  const banTargetId = section === 'moderation' ? (c.req.query('ban') ?? '') : '';
+  const banTargetUser = banTargetId ? await getUserById(c.env.DB, banTargetId) : null;
+
+  const [stats, reserved, tagCategories, users, reportCounts, activeBans, reports, bans, actions, banTargetBan, receiptUnread] =
+    await Promise.all([
+      section === 'overview' ? getStats(c.env.DB) : Promise.resolve(null),
+      section === 'reserved' ? listReservedUsernames(c.env.DB) : Promise.resolve(null),
+      section === 'tags' ? listTagCategories(c.env.DB) : Promise.resolve(null),
+      section === 'users' ? searchUsers(c.env.DB, query, 50, 0) : Promise.resolve(null),
+      section === 'moderation' ? countReports(c.env.DB) : Promise.resolve(null),
+      section === 'moderation' ? countActiveBans(c.env.DB) : Promise.resolve(0),
+      section === 'moderation' ? listReports(c.env.DB, reportStatus, 100, 0) : Promise.resolve([]),
+      section === 'moderation' ? listBans(c.env.DB, 100) : Promise.resolve([]),
+      section === 'moderation' ? listModerationActions(c.env.DB, 50) : Promise.resolve([]),
+      banTargetUser ? getBan(c.env.DB, banTargetUser.id) : Promise.resolve(null),
+      countUnreadReceipts(c.env.DB, user.id),
+    ]);
   const { message, error } = flash(c);
 
   const settings = c.get('settings');
@@ -151,6 +201,18 @@ async function renderAdmin(c: Context<AppContext>, section: AdminSection) {
       reserved={reserved ?? []}
       tagCategories={tagCategories ?? []}
       users={users ?? []}
+      reports={reports ?? []}
+      bans={bans ?? []}
+      moderationStats={{
+        open: reportCounts?.open ?? 0,
+        resolved: reportCounts?.resolved ?? 0,
+        dismissed: reportCounts?.dismissed ?? 0,
+        activeBans,
+      }}
+      actionLog={actions ?? []}
+      reportStatus={reportStatus}
+      banTarget={banTargetUser ? { user: banTargetUser, ban: banTargetBan } : null}
+      receiptUnread={receiptUnread}
       query={query}
       message={message}
       error={error}
@@ -169,6 +231,7 @@ adminRoutes.get('/admin/landing', (c) => renderAdmin(c, 'landing'));
 adminRoutes.get('/admin/reserved', (c) => renderAdmin(c, 'reserved'));
 adminRoutes.get('/admin/tags', (c) => renderAdmin(c, 'tags'));
 adminRoutes.get('/admin/users', (c) => renderAdmin(c, 'users'));
+adminRoutes.get('/admin/moderation', (c) => renderAdmin(c, 'moderation'));
 
 adminRoutes.post('/admin/settings', async (c) => {
   const current = c.get('settings');
@@ -494,4 +557,126 @@ adminRoutes.post('/admin/users/:id/delete', async (c) => {
     await invalidateProfiles(c.env.KV, [deleted.username]);
   }
   return c.redirect('/admin/users?saved=deleted');
+});
+
+/* ---------------------------- moderation ---------------------------- */
+
+/** Reason/duration enums, admin targets, and self-bans are rejected, never
+    coerced: silently picking a default duration could turn a 1-day timeout
+    into a permanent ban. */
+adminRoutes.post('/admin/moderation/ban', async (c) => {
+  const current = c.get('user')!;
+  const body = await c.req.parseBody();
+  const userId = str(body.user_id);
+  const target = userId ? await getUserById(c.env.DB, userId) : null;
+  if (!target) return c.redirect('/admin/moderation?err=target');
+  if (target.id === current.id) return c.redirect('/admin/moderation?err=ban_self');
+
+  // Admins (DB flag or env bootstrap list) cannot be banned, so a compromised
+  // admin session cannot lock the operator out of the console.
+  const envAdmins = envAdminEmails(c.env).map((email) => email.toLowerCase());
+  if (target.is_admin === 1 || (target.email && envAdmins.includes(target.email.toLowerCase()))) {
+    return c.redirect('/admin/moderation?err=ban_admin');
+  }
+
+  if (!isReportReason(body.reason)) {
+    return c.redirect('/admin/moderation?err=ban_reason');
+  }
+  if (!isBanDuration(body.duration)) {
+    return c.redirect('/admin/moderation?err=ban_duration');
+  }
+
+  const note = text(body.note, MAX_BAN_NOTE) || null;
+  const expiresAt = banExpiry(body.duration);
+  const reportId = str(body.report_id) || null;
+
+  await upsertBan(c.env.DB, {
+    userId: target.id,
+    reason: body.reason,
+    note,
+    createdBy: current.id,
+    expiresAt,
+  });
+  // The ban settles the queue: every open report against this account is
+  // resolved with the same note, rather than leaving duplicates behind.
+  await resolveOpenReportsForTarget(c.env.DB, target.id, current.id, note);
+  await logModerationAction(c.env.DB, {
+    actorId: current.id,
+    action: 'ban',
+    targetUserId: target.id,
+    reportId,
+    note: note ?? body.reason,
+  });
+  // Kills current sessions (best effort) and every cached page that embeds the
+  // account (its own profile, follower lists, tag suggestions).
+  await revokeUserSessions(c.env.KV, target.id);
+  await invalidateAllProfiles(c.env.KV);
+
+  return c.redirect('/admin/moderation?saved=banned');
+});
+
+adminRoutes.post('/admin/moderation/unban', async (c) => {
+  const current = c.get('user')!;
+  const body = await c.req.parseBody();
+  const userId = str(body.user_id);
+  const target = userId ? await getUserById(c.env.DB, userId) : null;
+  if (!target) return c.redirect('/admin/moderation?err=target');
+
+  const ban = await getBan(c.env.DB, target.id);
+  if (!ban || ban.revoked_at !== null) {
+    return c.redirect('/admin/moderation?err=no_ban');
+  }
+
+  await revokeBan(c.env.DB, target.id, current.id);
+  await logModerationAction(c.env.DB, {
+    actorId: current.id,
+    action: 'unban',
+    targetUserId: target.id,
+    note: text(body.note, MAX_BAN_NOTE) || null,
+  });
+  await invalidateAllProfiles(c.env.KV);
+  return c.redirect('/admin/moderation?saved=unbanned');
+});
+
+adminRoutes.post('/admin/moderation/reports/:id/status', async (c) => {
+  const current = c.get('user')!;
+  const id = c.req.param('id');
+  const report = id ? await getReportById(c.env.DB, id) : null;
+  if (!report) return c.redirect('/admin/moderation?err=report');
+
+  const body = await c.req.parseBody();
+  const status = body.status;
+  if (!isReportStatus(status)) return c.redirect('/admin/moderation?err=report');
+
+  const note = text(body.note, MAX_MODERATION_NOTE) || null;
+  const receipt = text(body.receipt, MAX_RECEIPT_BODY) || null;
+  await setReportStatus(c.env.DB, report.id, status, note, current.id);
+  if (receipt) {
+    await createReportReceipt(c.env.DB, {
+      reportId: report.id,
+      adminId: current.id,
+      body: receipt,
+    });
+    await logModerationAction(c.env.DB, {
+      actorId: current.id,
+      action: 'receipt',
+      targetUserId: report.target_user_id,
+      reportId: report.id,
+      note: receipt,
+    });
+  }
+  if (report.status !== status) {
+    await logModerationAction(c.env.DB, {
+      actorId: current.id,
+      action: `report_${status}`,
+      targetUserId: report.target_user_id,
+      reportId: report.id,
+      note,
+    });
+  }
+
+  const filter = str(body.filter);
+  const nextFilter = filter === 'all' || isReportStatus(filter) ? filter : 'open';
+  const saved = receipt ? 'receipt' : 'moderation';
+  return c.redirect(`/admin/moderation?saved=${saved}&status=${nextFilter}`);
 });

@@ -40,9 +40,9 @@
   // uploads to WebP server-side before they are stored in R2. Independent of
   // the R2 binding — without R2 uploads stay disabled; without Images the
   // original bytes are stored unchanged.
-  // "images": {
-  //   "binding": "IMAGES"
-  // },
+  "images": {
+    "binding": "IMAGES"
+  },
   "env": {
     "production": {
       "name": "earthol-player-profile-production",

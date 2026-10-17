@@ -1,12 +1,33 @@
 /** Presentational view for the admin panel; all writes are posted to `/admin/*`. */
 import { Layout } from './layout';
-import type { TagCategoryRow, UserRow } from '../db/types';
+import type {
+  BanStateRow,
+  ModerationActionRow,
+  ReportRow,
+  ReportStatus,
+  TagCategoryRow,
+  UserBanRow,
+  UserRow,
+} from '../db/types';
 import { TAG_COLORS, tagChipClasses } from '../lib/tags';
 import { THEMES, VISIBILITIES } from '../lib/themes';
 import type { AdminStats } from '../db/queries';
 import { ADMIN_SECTIONS, type AdminSection } from '../lib/admin-nav';
 import { MAX_LANDING_COPY, MAX_LANDING_URL, type LandingCopyKey, type SiteSettings } from '../lib/settings';
 import type { EnvLocks } from '../lib/config';
+import {
+  BAN_DURATIONS,
+  MAX_BAN_NOTE,
+  MAX_MODERATION_NOTE,
+  MAX_RECEIPT_BODY,
+  REPORT_REASONS,
+  REPORT_REASON_KEYS,
+  REPORT_STATUSES,
+  REPORT_STATUS_KEYS,
+  banDurationKey,
+  isBanActive,
+  isReportReason,
+} from '../lib/moderation';
 import type { Locale, MessageKey, TranslateFn } from '../i18n';
 
 const CUSTOM_CODE_MAX = 32768;
@@ -114,6 +135,18 @@ export interface AdminViewProps {
   reserved: string[];
   tagCategories: TagCategoryRow[];
   users: UserRow[];
+  reports: ReportRow[];
+  bans: UserBanRow[];
+  moderationStats: {
+    open: number;
+    resolved: number;
+    dismissed: number;
+    activeBans: number;
+  };
+  actionLog: ModerationActionRow[];
+  reportStatus: ReportStatus | 'all';
+  banTarget: { user: UserRow; ban: BanStateRow | null } | null;
+  receiptUnread?: number;
   query: string;
   message?: string;
   error?: string;
@@ -122,6 +155,36 @@ export interface AdminViewProps {
 
 function formatDate(ts: number): string {
   return new Date(ts).toISOString().slice(0, 10);
+}
+
+function reportReasonLabel(reason: string, t: TranslateFn): string {
+  return isReportReason(reason) ? t(REPORT_REASON_KEYS[reason]) : reason;
+}
+
+function banStateLabel(ban: UserBanRow, t: TranslateFn): string {
+  if (ban.revoked_at !== null) return t('admin.moderation.state.revoked');
+  if (!isBanActive(ban)) return t('admin.moderation.state.expired');
+  return t('admin.moderation.state.active');
+}
+
+function actionLabel(action: string, t: TranslateFn): string {
+  const key = `admin.moderation.action.${action}` as MessageKey;
+  return t(key);
+}
+
+const REPORT_FILTERS = ['open', 'resolved', 'dismissed', 'all'] as const;
+
+function reportFilterKey(status: (typeof REPORT_FILTERS)[number]): MessageKey {
+  switch (status) {
+    case 'resolved':
+      return 'admin.moderation.filter.resolved';
+    case 'dismissed':
+      return 'admin.moderation.filter.dismissed';
+    case 'all':
+      return 'admin.moderation.filter.all';
+    default:
+      return 'admin.moderation.filter.open';
+  }
 }
 
 export function AdminView({
@@ -142,6 +205,13 @@ export function AdminView({
   reserved,
   tagCategories,
   users,
+  reports,
+  bans,
+  moderationStats,
+  actionLog,
+  reportStatus,
+  banTarget,
+  receiptUnread,
   query,
   message,
   error,
@@ -172,6 +242,7 @@ export function AdminView({
       locale={locale}
       pathname={pathname}
       isAdmin
+      receiptUnread={receiptUnread}
       customCss={settings.customCss}
       customJs={settings.customJs}
       customFooter={settings.customFooter}
@@ -209,7 +280,9 @@ export function AdminView({
             </div>
 
             <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {ADMIN_SECTIONS.filter((item) => item.section !== 'overview').map((item) => (
+              {ADMIN_SECTIONS.filter(
+                (item) => item.section !== 'overview' && item.section !== 'moderation',
+              ).map((item) => (
                 <a
                   key={item.path}
                   href={item.path}
@@ -971,6 +1044,7 @@ export function AdminView({
                     const isSelf = row.id === selfId;
                     const isEnv = row.email ? envSet.has(row.email.toLowerCase()) : false;
                     const isAdmin = row.is_admin === 1 || isEnv;
+                    const isBanned = row.is_banned === 1;
                     return (
                       <tr key={row.id}>
                         <td class="py-2.5 pr-4">
@@ -986,6 +1060,11 @@ export function AdminView({
                             {isAdmin ? (
                               <span class="chip bg-secondary/15 text-secondary">
                                 {isEnv ? t('admin.users.envAdmin') : t('admin.title')}
+                              </span>
+                            ) : null}
+                            {isBanned ? (
+                              <span class="chip bg-danger/10 text-danger">
+                                {t('admin.users.banned')}
                               </span>
                             ) : null}
                           </div>
@@ -1014,6 +1093,12 @@ export function AdminView({
                                   {t('admin.users.view')}
                                 </a>
                               ) : null}
+                              <a
+                                href={`/admin/moderation?ban=${encodeURIComponent(row.id)}`}
+                                class="btn-outline px-3 py-1 text-xs"
+                              >
+                                {t('admin.users.moderate')}
+                              </a>
                               {!isEnv ? (
                                 <form
                                   method="post"
@@ -1052,6 +1137,399 @@ export function AdminView({
             </div>
           )}
         </div>
+        ) : null}
+
+        {section === 'moderation' ? (
+        <>
+          <div class="grid gap-4 sm:grid-cols-3">
+            <div class="card p-5">
+              <p class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                {t('admin.moderation.stat.open')}
+              </p>
+              <p class="mt-1 text-3xl font-bold tabular-nums">{moderationStats.open}</p>
+            </div>
+            <div class="card p-5">
+              <p class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                {t('admin.moderation.stat.bans')}
+              </p>
+              <p class="mt-1 text-3xl font-bold tabular-nums">{moderationStats.activeBans}</p>
+            </div>
+            <div class="card p-5">
+              <p class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                {t('admin.moderation.stat.resolved')}
+              </p>
+              <p class="mt-1 text-3xl font-bold tabular-nums">
+                {moderationStats.resolved + moderationStats.dismissed}
+              </p>
+            </div>
+          </div>
+
+          {banTarget ? (
+            <div class="card p-6">
+              <div class="mb-4">
+                <h2 class="text-lg font-bold tracking-tight">
+                  {t('admin.moderation.banHeading', {
+                    username: banTarget.user.username ?? banTarget.user.display_name ?? '—',
+                  })}
+                </h2>
+                <p class="mt-0.5 text-sm text-muted-foreground">
+                  {t('admin.moderation.banSubtitle')}
+                </p>
+              </div>
+
+              {banTarget.ban && isBanActive(banTarget.ban) ? (
+                <div class="space-y-4">
+                  <div class="rounded-2xl bg-muted p-4 text-sm">
+                    <p class="font-semibold text-danger">{t('admin.moderation.state.active')}</p>
+                    <p class="mt-1">
+                      {t('admin.moderation.reason')}: {reportReasonLabel(banTarget.ban.reason, t)}
+                    </p>
+                    <p class="mt-1 text-muted-foreground">
+                      {banTarget.ban.expires_at === null
+                        ? t('admin.moderation.permanent')
+                        : t('admin.moderation.until', { date: formatDate(banTarget.ban.expires_at) })}
+                    </p>
+                    {banTarget.ban.note ? (
+                      <p class="mt-1 whitespace-pre-wrap text-muted-foreground">{banTarget.ban.note}</p>
+                    ) : null}
+                  </div>
+                  <form method="post" action="/admin/moderation/unban" class="flex flex-col gap-2 sm:flex-row sm:items-end">
+                    <input type="hidden" name="_csrf" value={csrfToken} />
+                    <input type="hidden" name="user_id" value={banTarget.user.id} />
+                    <div class="flex-1">
+                      <label class="label" for="unban-note">
+                        {t('admin.moderation.note')}
+                      </label>
+                      <input id="unban-note" name="note" maxlength={MAX_BAN_NOTE} class="field" />
+                    </div>
+                    <button type="submit" class="btn-outline border-danger/30 text-danger hover:bg-danger/10">
+                      {t('admin.moderation.unban')}
+                    </button>
+                  </form>
+                </div>
+              ) : (
+                <form method="post" action="/admin/moderation/ban" class="space-y-4">
+                  <input type="hidden" name="_csrf" value={csrfToken} />
+                  <input type="hidden" name="user_id" value={banTarget.user.id} />
+                  <div class="grid gap-4 sm:grid-cols-2">
+                    <div>
+                      <label class="label" for="ban-reason">
+                        {t('admin.moderation.reason')}
+                      </label>
+                      <select id="ban-reason" name="reason" class="field" required>
+                        {REPORT_REASONS.map((reason) => (
+                          <option value={reason}>{t(REPORT_REASON_KEYS[reason])}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label class="label" for="ban-duration">
+                        {t('admin.moderation.duration')}
+                      </label>
+                      <select id="ban-duration" name="duration" class="field" required>
+                        {BAN_DURATIONS.map((duration) => (
+                          <option value={duration.id}>{t(banDurationKey(duration.id))}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  <div>
+                    <label class="label" for="ban-note">
+                      {t('admin.moderation.banNote')}
+                    </label>
+                    <textarea
+                      id="ban-note"
+                      name="note"
+                      rows={3}
+                      maxlength={MAX_BAN_NOTE}
+                      class="field w-full"
+                    />
+                  </div>
+                  <p class="rounded-2xl bg-muted px-4 py-3 text-xs text-muted-foreground">
+                    {t('admin.moderation.banEffect')}
+                  </p>
+                  <div class="flex flex-wrap gap-2">
+                    <button type="submit" class="btn-primary">
+                      <span class="material-symbols-outlined icon-sm" aria-hidden="true">
+                        gavel
+                      </span>
+                      {t('admin.moderation.applyBan')}
+                    </button>
+                    <a href="/admin/moderation" class="btn-outline">
+                      {t('admin.moderation.cancel')}
+                    </a>
+                  </div>
+                </form>
+              )}
+            </div>
+          ) : null}
+
+          <div class="card p-6">
+            <div class="mb-4 flex flex-wrap items-end justify-between gap-3">
+              <div>
+                <h2 class="text-lg font-bold tracking-tight">{t('admin.moderation.queue')}</h2>
+                <p class="mt-0.5 text-sm text-muted-foreground">{t('admin.moderation.queueSubtitle')}</p>
+              </div>
+              <div class="flex flex-wrap gap-1.5">
+                {REPORT_FILTERS.map((filter) => (
+                  <a
+                    href={`/admin/moderation?status=${filter}`}
+                    class={
+                      reportStatus === filter
+                        ? 'chip bg-primary/10 font-semibold text-primary'
+                        : 'chip bg-muted text-muted-foreground hover:text-foreground'
+                    }
+                  >
+                    {t(reportFilterKey(filter))}
+                  </a>
+                ))}
+              </div>
+            </div>
+
+            {reports.length === 0 ? (
+              <p class="rounded-2xl bg-muted px-4 py-3 text-sm text-muted-foreground">
+                {t('admin.moderation.none')}
+              </p>
+            ) : (
+              <div class="space-y-3">
+                {reports.map((report) => (
+                  <div class="rounded-2xl border border-border p-4" data-report>
+                    <div class="flex flex-wrap items-start justify-between gap-2">
+                      <div class="min-w-0">
+                        <p class="flex flex-wrap items-center gap-2 text-sm font-semibold">
+                          {report.target_username ? (
+                            <a
+                              href={`/${report.target_username}`}
+                              class="hover:text-primary hover:underline"
+                            >
+                              @{report.target_username}
+                            </a>
+                          ) : (
+                            <span>{t('admin.moderation.unknownUser')}</span>
+                          )}
+                          <span class="chip bg-muted text-muted-foreground">
+                            {reportReasonLabel(report.reason, t)}
+                          </span>
+                          <span
+                            class={
+                              report.status === 'open'
+                                ? 'chip bg-warning/10 text-warning'
+                                : report.status === 'resolved'
+                                  ? 'chip bg-success/10 text-success'
+                                  : 'chip bg-muted text-muted-foreground'
+                            }
+                          >
+                            {t(REPORT_STATUS_KEYS[report.status as ReportStatus])}
+                          </span>
+                        </p>
+                        <p class="mt-1 text-xs text-muted-foreground">
+                          {t('admin.moderation.reporter')}:{' '}
+                          {report.reporter_username ? `@${report.reporter_username}` : t('admin.moderation.unknownUser')}
+                          {' · '}
+                          {formatDate(report.created_at)}
+                        </p>
+                      </div>
+                      <div class="flex flex-wrap gap-2">
+                        {report.target_username ? (
+                          <a
+                            href={`/admin/moderation?ban=${encodeURIComponent(report.target_user_id)}`}
+                            class="btn-outline px-3 py-1 text-xs border-danger/30 text-danger hover:bg-danger/10"
+                          >
+                            {t('admin.moderation.ban')}
+                          </a>
+                        ) : null}
+                      </div>
+                    </div>
+
+                    {report.details ? (
+                      <p class="mt-3 whitespace-pre-wrap rounded-xl bg-muted px-3 py-2 text-sm text-foreground/90">
+                        {report.details}
+                      </p>
+                    ) : null}
+
+                    {report.status !== 'open' ? (
+                      <p class="mt-2 text-xs text-muted-foreground">
+                        {t('admin.moderation.handledBy', {
+                          name: report.handler_username ? `@${report.handler_username}` : t('admin.moderation.unknownUser'),
+                          date: report.handled_at ? formatDate(report.handled_at) : '—',
+                        })}
+                        {report.resolution ? ` · ${report.resolution}` : ''}
+                      </p>
+                    ) : null}
+
+                    <form
+                      method="post"
+                      action={`/admin/moderation/reports/${report.id}/status`}
+                      class="mt-3 space-y-2"
+                    >
+                      <input type="hidden" name="_csrf" value={csrfToken} />
+                      <input type="hidden" name="filter" value={reportStatus} />
+                      <div class="flex flex-col gap-2 sm:flex-row sm:items-end">
+                        <div class="sm:w-40">
+                          <label class="label" for={`report-status-${report.id}`}>
+                            {t('admin.moderation.status')}
+                          </label>
+                          <select
+                            id={`report-status-${report.id}`}
+                            name="status"
+                            class="field"
+                          >
+                            {REPORT_STATUSES.map((status) => (
+                              <option value={status} selected={status === report.status}>
+                                {t(REPORT_STATUS_KEYS[status])}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div class="flex-1">
+                          <label class="label" for={`report-note-${report.id}`}>
+                            {t('admin.moderation.note')}
+                          </label>
+                          <input
+                            id={`report-note-${report.id}`}
+                            name="note"
+                            maxlength={MAX_MODERATION_NOTE}
+                            class="field"
+                          />
+                        </div>
+                        <button type="submit" class="btn-outline shrink-0">
+                          {t('admin.moderation.update')}
+                        </button>
+                      </div>
+                      <div>
+                        <label class="label" for={`report-receipt-${report.id}`}>
+                          {t('admin.moderation.receipt')}
+                        </label>
+                        <textarea
+                          id={`report-receipt-${report.id}`}
+                          name="receipt"
+                          rows={2}
+                          maxlength={MAX_RECEIPT_BODY}
+                          placeholder={t('admin.moderation.receiptHint')}
+                          class="field w-full"
+                        />
+                      </div>
+                    </form>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div class="card p-6">
+            <div class="mb-4">
+              <h2 class="text-lg font-bold tracking-tight">{t('admin.moderation.bans')}</h2>
+              <p class="mt-0.5 text-sm text-muted-foreground">{t('admin.moderation.bansSubtitle')}</p>
+            </div>
+            {bans.length === 0 ? (
+              <p class="rounded-2xl bg-muted px-4 py-3 text-sm text-muted-foreground">
+                {t('admin.moderation.bansNone')}
+              </p>
+            ) : (
+              <div class="overflow-x-auto">
+                <table class="w-full text-left text-sm">
+                  <thead class="text-xs uppercase tracking-wide text-muted-foreground">
+                    <tr>
+                      <th class="py-2 pr-4 font-semibold">{t('admin.moderation.target')}</th>
+                      <th class="py-2 pr-4 font-semibold">{t('admin.moderation.reason')}</th>
+                      <th class="py-2 pr-4 font-semibold">{t('admin.moderation.state')}</th>
+                      <th class="py-2 pr-4 font-semibold">{t('admin.moderation.until')}</th>
+                      <th class="py-2 pr-4 font-semibold">{t('admin.users.col.actions')}</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-border">
+                    {bans.map((ban) => (
+                      <tr key={`${ban.user_id}:${ban.created_at}`}>
+                        <td class="py-2.5 pr-4">
+                          {ban.username ? (
+                            <a href={`/${ban.username}`} class="font-semibold hover:text-primary hover:underline">
+                              @{ban.username}
+                            </a>
+                          ) : (
+                            <span class="font-semibold">{t('admin.moderation.unknownUser')}</span>
+                          )}
+                          <p class="text-xs text-muted-foreground">by {ban.created_by_username ? `@${ban.created_by_username}` : '—'}</p>
+                        </td>
+                        <td class="py-2.5 pr-4">
+                          <p>{reportReasonLabel(ban.reason, t)}</p>
+                          {ban.note ? (
+                            <p class="max-w-xs whitespace-pre-wrap text-xs text-muted-foreground">{ban.note}</p>
+                          ) : null}
+                        </td>
+                        <td class="py-2.5 pr-4">
+                          <span
+                            class={
+                              isBanActive(ban)
+                                ? 'chip bg-danger/10 text-danger'
+                                : 'chip bg-muted text-muted-foreground'
+                            }
+                          >
+                            {banStateLabel(ban, t)}
+                          </span>
+                        </td>
+                        <td class="py-2.5 pr-4 text-muted-foreground tabular-nums">
+                          {ban.expires_at === null
+                            ? t('admin.moderation.permanent')
+                            : formatDate(ban.expires_at)}
+                        </td>
+                        <td class="py-2.5 pr-4">
+                          {isBanActive(ban) ? (
+                            <form method="post" action="/admin/moderation/unban" class="contents">
+                              <input type="hidden" name="_csrf" value={csrfToken} />
+                              <input type="hidden" name="user_id" value={ban.user_id} />
+                              <button type="submit" class="btn-outline px-3 py-1 text-xs">
+                                {t('admin.moderation.unban')}
+                              </button>
+                            </form>
+                          ) : (
+                            <a href={`/admin/moderation?ban=${encodeURIComponent(ban.user_id)}`} class="btn-ghost px-3 py-1 text-xs">
+                              {t('admin.moderation.reban')}
+                            </a>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          <div class="card p-6">
+            <div class="mb-4">
+              <h2 class="text-lg font-bold tracking-tight">{t('admin.moderation.history')}</h2>
+              <p class="mt-0.5 text-sm text-muted-foreground">{t('admin.moderation.historySubtitle')}</p>
+            </div>
+            {actionLog.length === 0 ? (
+              <p class="rounded-2xl bg-muted px-4 py-3 text-sm text-muted-foreground">
+                {t('admin.moderation.historyNone')}
+              </p>
+            ) : (
+              <ul class="space-y-2 text-sm">
+                {actionLog.map((entry) => (
+                  <li key={entry.id} class="flex flex-wrap items-baseline gap-x-2 gap-y-1 border-b border-border/60 pb-2 last:border-0 last:pb-0">
+                    <span class="font-semibold">{actionLabel(entry.action, t)}</span>
+                    {entry.target_username ? (
+                      <a href={`/${entry.target_username}`} class="text-muted-foreground hover:text-primary hover:underline">
+                        @{entry.target_username}
+                      </a>
+                    ) : null}
+                    <span class="text-xs text-muted-foreground">
+                      {t('admin.moderation.by', {
+                        name: entry.actor_username ? `@${entry.actor_username}` : t('admin.moderation.unknownUser'),
+                      })}
+                      {' · '}
+                      {formatDate(entry.created_at)}
+                    </span>
+                    {entry.note ? (
+                      <span class="w-full text-xs text-muted-foreground">{entry.note}</span>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </>
         ) : null}
       </section>
     </Layout>

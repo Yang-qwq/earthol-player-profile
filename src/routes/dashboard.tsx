@@ -12,6 +12,7 @@ import { DASHBOARD_SECTION_PATH, type DashboardSection } from '../lib/dashboard-
 import {
   createLoginToken,
   confirmTotpFactor,
+  countUnreadReceipts,
   deleteTotpFactor,
   getTotpFactor,
   getProfileLayout,
@@ -170,7 +171,7 @@ async function renderDashboard(c: Context<AppContext>, section: DashboardSection
 
   const t = c.get('t');
   const settings = c.get('settings');
-  const [fields, tags, tagCategories, identities, totpFactor, blocks, blockViewers, fieldsPosition] = await Promise.all([
+  const [fields, tags, tagCategories, identities, totpFactor, blocks, blockViewers, fieldsPosition, receiptUnread] = await Promise.all([
     section === 'fields' ? listFields(c.env.DB, user.id) : Promise.resolve([]),
     section === 'tags' ? listUserTags(c.env.DB, user.id) : Promise.resolve([]),
     section === 'tags' ? listTagCategories(c.env.DB) : Promise.resolve([]),
@@ -179,6 +180,7 @@ async function renderDashboard(c: Context<AppContext>, section: DashboardSection
     section === 'blocks' ? listProfileBlocks(c.env.DB, user.id) : Promise.resolve([]),
     section === 'blocks' ? listBlockViewers(c.env.DB, user.id) : Promise.resolve([]),
     section === 'blocks' ? getProfileLayout(c.env.DB, user.id) : Promise.resolve(0),
+    countUnreadReceipts(c.env.DB, user.id),
   ]);
   const saved = c.req.query('saved');
   const message =
@@ -240,6 +242,7 @@ async function renderDashboard(c: Context<AppContext>, section: DashboardSection
       totpFactor={totpFactor}
       totpUri={totpProvisioningUri}
       aiConfigured={Boolean(resolveOpenAI(c.env, settings))}
+      receiptUnread={receiptUnread}
       message={message}
       error={errorMessage(c.req.query('error'), t)}
       nonce={c.get('secureHeadersNonce')}

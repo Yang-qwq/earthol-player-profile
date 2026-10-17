@@ -2,7 +2,7 @@
  * Worker bindings (`Env`) and the Hono request context. `Variables` mirrors
  * exactly what the global middleware in `src/app.tsx` sets for handlers.
  */
-import type { UserRow } from './db/types';
+import type { BanStateRow, UserRow } from './db/types';
 import type { Locale, TranslateFn } from './i18n';
 import type { SiteSettings } from './lib/settings';
 
@@ -62,6 +62,9 @@ export interface Variables {
   settings: SiteSettings;
   appName: string;
   isAdmin: boolean;
+  /** Active ban for the signed-in user, if any (`getActiveBan`). */
+  ban?: BanStateRow | null;
+  isBanned: boolean;
 }
 
 export type AppContext = {
